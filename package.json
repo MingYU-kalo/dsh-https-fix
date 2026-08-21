@@ -28,6 +28,10 @@
     "js-yaml": "^4.1.0"
   },
   "license": "MIT",
+  "author": { "name": "MingYU-kalo" },
+  "contributors": [
+    { "name": "DeepSeek", "url": "https://github.com/deepseek-ai" }
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/MingYU-kalo/dsh-https-fix.git"

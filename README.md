@@ -23,12 +23,32 @@ DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与�
 | `main` | 最新代码（跟随 dsh 最新版本） |
 | `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.1-rc.2` |
 
-## 安装（开发期预览）
+## 安装
+
+> 本插件**未发布到 npm**，请从 Git 或本地路径安装。
+
+按 dsh 版本安装对应冻结分支（推荐，与你的 dsh 版本严格对应）：
 
 ```bash
+# dsh 0.1.1-rc.2 对应分支
 dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-0.1.1-rc.2
-# 重启 dsh web 后生效
+# 或始终追随最新代码（main，可能超前于你的 dsh 版本）
+dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#main
 ```
+
+本地 clone 后自行修改/修复，再从本地路径安装：
+
+```bash
+git clone https://github.com/MingYU-kalo/dsh-https-fix.git
+dsh plugin --profile web add file:./dsh-https-fix
+```
+
+安装完成后**重启 dsh web** 生效；插件出现在 设置 → 插件配置 → Https Fix。
+
+## 贡献者
+
+- [DeepSeek](https://github.com/deepseek-ai) —— DeepSeek Harness 上游框架
+- [MingYU-kalo](https://github.com/MingYU-kalo) —— 本插件作者
 
 ## 部署前提
 
