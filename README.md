@@ -45,11 +45,6 @@ dsh plugin --profile web add file:./dsh-https-fix
 
 安装完成后**重启 dsh web** 生效；插件出现在 设置 → 插件配置 → Https Fix。
 
-## 贡献者
-
-- [DeepSeek](https://github.com/deepseek-ai) —— DeepSeek Harness 上游框架
-- [MingYU-kalo](https://github.com/MingYU-kalo) —— 本插件作者
-
 ## 部署前提
 
 - 经域名访问时，设置页需要客户端 `connection.isLoopback` 放行（dsh 客户端门）。
