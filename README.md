@@ -1,5 +1,7 @@
 # dsh-https-fix
 
+> ⚠️ **维护说明**：本项目主要服务于**作者本人使用**。更新频率与作者升级 dsh 新版本深度绑定，统计学上**无法预测**更新节奏。如有使用需求，请 `git` 拉取最新版本并自行修复/适配。
+
 DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与可配置管理**。
 
 在 **设置 → 插件配置 → Https Fix** 中统一管理：
@@ -7,7 +9,7 @@ DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与�
 - 关闭 http 外网访问（默认关；改写 `$DSH_HOME/cordis.patch.yml`，重启生效）
 - http 端口（默认取 dsh 当前 http 端口；保存自动改写补丁配置，重启生效）
 - HTTPS 开关（默认关，开启前自动校验、通过后自动启动 HTTPS 服务）
-- HTTPS 端口（默认 3081，可复用 http 端口）
+- HTTPS 端口（默认 3081）
 - 域名、监听地址、TLS 证书/密钥路径
 - 「校验 HTTPS 可用性」按钮（端口 / 证书配对 / 域名逐项校验并输出日志）
 - 「保存配置」按钮
