@@ -27,23 +27,22 @@ DeepSeek Harness 的 Web GUI（`dsh web`）默认只提供 **HTTP** 监听（`ds
 |---|------|------|--------|-----------|----------|
 | F1 | 关闭http外网访问 (blockHttpExternalAccess) | 布尔 | **false** | **用户决策①**：原"启用http端口"改为本语义。true 时插件向 `$DSH_HOME/cordis.patch.yml` 写入 webserver 行覆盖 `host: 127.0.0.1`（机器级补丁层，重启后 http 仅回环可达）；false 时移除插件写入的该项覆盖 | 重启 dsh 后 |
 | F2 | http端口 (httpPort) | 整数 | 无默认值；初始值 = dsh 配置中的 http 端口（`webServer` 当前实际端口） | 1–65535。**用户决策②**：保存时插件自动改写 `$DSH_HOME/cordis.patch.yml` 中 webserver 行的 `port`，重启 dsh 生效 | 重启后 |
-| F3 | 启用https (enableHttps) | 布尔 | **false** | 置 true 前自动执行一次完整校验（同 F10），**全部通过才允许为 true**；为 true 时自动启动 HTTPS 服务。true 时证书路径、密钥路径、域名必填 | 即时 |
-| F4 | https端口使用http端口 (httpsSamePort) | 布尔 | **false** | true 时忽略 F5，HTTPS 监听在 http 端口（仅当该端口未被 http 占用时可行；与 F1 搭配使用场景） | 即时 |
-| F5 | https端口 (httpsPort) | 整数 | **3081** | 1–65535；F4=false 时生效 | 即时 |
-| F6 | 域名 (domain) | 字符串 | 空 | 启用https 时**必填**；用于 Host 透传与证书域名校验 | 即时 |
-| F7 | 地址 (address) | 字符串 | 空 | 多网卡时指定 HTTPS 监听 IP；留空 = 监听所有网卡 `0.0.0.0`。备注可留空 | 即时 |
-| F8 | TLS证书(cert)路径 (certPath) | 字符串 | 空 | 启用https 时**必填**；文件必须可读、PEM 格式、证书域名含 F6 | 即时 |
-| F9 | TLS密钥(Key)路径 (keyPath) | 字符串 | 空 | 启用https 时**必填**；文件必须可读、与 F8 证书配对 | 即时 |
-| F10 | 校验https可用性（按钮） | 动作 | — | 校验：HTTPS 端口可监听、证书/密钥可加载且配对、域名可解析（**用户决策③：仅检查可解析**，不要求解析结果指向本机）；逐项输出日志到卡片 | 即时 |
-| F11 | 保存配置（按钮） | 动作 | — | 把当前表单一次性写入 settings 命名空间 `https-fix`（`settings.update` 写路径），写后自动重读；F1/F2 同时触发补丁文件改写 | 即时 |
+| F3 | 启用https (enableHttps) | 布尔 | **false** | 置 true 前自动执行一次完整校验（同 F9），**全部通过才允许为 true**；为 true 时自动启动 HTTPS 服务。true 时证书路径、密钥路径、域名必填 | 即时 |
+| F4 | https端口 (httpsPort) | 整数 | **3081** | 1–65535 | 即时 |
+| F5 | 域名 (domain) | 字符串 | 空 | 启用https 时**必填**；用于 Host 透传与证书域名校验 | 即时 |
+| F6 | 地址 (address) | 字符串 | 空 | 多网卡时指定 HTTPS 监听 IP；留空 = 监听所有网卡 `0.0.0.0`。备注可留空 | 即时 |
+| F7 | TLS证书(cert)路径 (certPath) | 字符串 | 空 | 启用https 时**必填**；文件必须可读、PEM 格式、证书域名含 F5 | 即时 |
+| F8 | TLS密钥(Key)路径 (keyPath) | 字符串 | 空 | 启用https 时**必填**；文件必须可读、与 F7 证书配对 | 即时 |
+| F9 | 校验https可用性（按钮） | 动作 | — | 校验：HTTPS 端口可监听、证书/密钥可加载且配对、域名可解析（**用户决策③：仅检查可解析**，不要求解析结果指向本机）；逐项输出日志到卡片 | 即时 |
+| F10 | 保存配置（按钮） | 动作 | — | 把当前表单一次性写入 settings 命名空间 `https-fix`（`settings.update` 写路径），写后自动重读；F1/F2 同时触发补丁文件改写 | 即时 |
 
 ### 2.1 行为细则
 
-- **F3 的校验门**：`enableHttps` 从 false 切到 true 时，Host 侧执行一次自检（F10 全套：端口探测、证书加载、密钥配对、域名解析）。全部通过 → 置 true 并自动启动 HTTPS 监听；任一失败 → 拒绝置 true，卡片展示失败原因日志。
-- **HTTPS 自动启动**：`enableHttps=true 且 F6/F8/F9 已填` 时，Host 侧立即启动 HTTPS 监听器；启动失败（端口占用等）回写错误状态到 UI，不 crash 整个 dsh。
+- **F3 的校验门**：`enableHttps` 从 false 切到 true 时，Host 侧执行一次自检（F9 全套：端口探测、证书加载、密钥配对、域名解析）。全部通过 → 置 true 并自动启动 HTTPS 监听；任一失败 → 拒绝置 true，卡片展示失败原因日志。
+- **HTTPS 自动启动**：`enableHttps=true 且 F5/F7/F8 已填` 时，Host 侧立即启动 HTTPS 监听器；启动失败（端口占用等）回写错误状态到 UI，不 crash 整个 dsh。
 - **F1/F2 的补丁托管**：插件独占管理 `$DSH_HOME/cordis.patch.yml`（机器级用户补丁层，应用顺序：bundle 层 → profile 层 → **home 层** → --patch 层，已源码验证）。插件只增删自己负责的 `id: webserver` 条目；不触碰 profile 自己的 `cordis.patch.yml`。**注意**：若用户手动以 `--port` 启动，--patch 层高于 home 层，会覆盖插件写入值（文档明示）。
 - **证书热更新**：每次校验/保存以及定时（`ctx.timer.interval`，默认 60s）stat 证书文件，内容变化自动重建 TLS context，无需重启 dsh。
-- **日志输出**：F10 校验结果逐条输出到卡片内日志区（成功/失败着色），同时写 Host 侧 `ctx.logger`。
+- **日志输出**：F9 校验结果逐条输出到卡片内日志区（成功/失败着色），同时写 Host 侧 `ctx.logger`。
 
 ---
 
@@ -125,12 +124,11 @@ const Config = z.object({
   blockHttpExternalAccess: z.boolean().default(false),   // F1
   httpPort:               z.natural().min(1).max(65535), // F2 无默认值，apply 时以 ctx.webServer.port 初始化
   enableHttps:            z.boolean().default(false),    // F3
-  httpsSamePort:          z.boolean().default(false),    // F4
-  httpsPort:              z.natural().min(1).max(65535).default(3081), // F5
-  domain:                 z.string().default(''),        // F6
-  address:                z.string().default(''),        // F7
-  certPath:               z.string().default(''),        // F8
-  keyPath:                z.string().default(''),        // F9
+  httpsPort:              z.natural().min(1).max(65535).default(3081), // F4
+  domain:                 z.string().default(''),        // F5
+  address:                z.string().default(''),        // F6
+  certPath:               z.string().default(''),        // F7
+  keyPath:                z.string().default(''),        // F8
 })
 
 function apply(ctx, config) { /* 见下 */ }
@@ -198,11 +196,11 @@ ctx.slots.register({
 ```
 
 2. **卡片数据流**：`ctx.settingsScope.bind({ namespace:'https-fix', decode })` 建立命名空间 scope；参照 `ui-settings-plugins` 的 `CardForm` 模式：布尔/整数/文本字段阶段化编辑；`保存配置` 按钮把阶段值合并提交。
-3. **F10 校验按钮**：`fetch('/https-fix/validate', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({type:'client-request', rpcId: crypto.randomUUID(), payload:{}}) })` → 渲染返回的逐行日志。
-4. **F11 保存按钮**：走 scope 写路径（`settings.update`）一次性提交；提交成功后触发共享镜像重读；F1/F2 字段旁标注"重启 dsh 后生效"。
-5. **条件渲染**：`enableHttps=false` 时 https 相关字段置灰但可见；`httpsSamePort=true` 时 https 端口字段禁用。
+3. **F9 校验按钮**：`fetch('/https-fix/validate', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({type:'client-request', rpcId: crypto.randomUUID(), payload:{}}) })` → 渲染返回的逐行日志。
+4. **F10 保存按钮**：走 scope 写路径（`settings.update`）一次性提交；提交成功后触发共享镜像重读；F1/F2 字段旁标注"重启 dsh 后生效"。
+5. **条件渲染**：`enableHttps=false` 时 https 相关字段置灰但可见。
 
-### 4.5 校验逻辑明细（F10）
+### 4.5 校验逻辑明细（F9）
 
 | 检查项 | 方法 | 失败输出示例 |
 |--------|------|--------------|
@@ -245,11 +243,11 @@ dsh plugin --profile web add file:./dsh-https-fix
 - **M1 需求与仓库**（本期完成）：本需求文档入库；`main` 与 `dsh-0.1.1-rc.2` 分支就绪；README 说明分支策略。
 - **M2 可安装骨架**：`dsh plugin add` 安装成功；插件出现在插件配置卡片列表；字段与默认值符合第 2 节定义；补丁托管在 `$DSH_HOME/cordis.patch.yml` 验证可合并。
 - **M3 HTTPS 服务**：配置证书/域名后 HTTPS 监听自动启动；`/`、`/api`、SSE、WS 全链路经 HTTPS 可用；关闭开关后监听释放。
-- **M4 校验与保存**：F10 输出逐项日志且结论准确（错误证书/占用端口/错误域名做负向用例）；F11 保存后重启 dsh 配置保持；F1/F2 改写补丁后 `--dump-config` 显示 webserver 行生效。
+- **M4 校验与保存**：F9 输出逐项日志且结论准确（错误证书/占用端口/错误域名做负向用例）；F10 保存后重启 dsh 配置保持；F1/F2 改写补丁后 `--dump-config` 显示 webserver 行生效。
 - **验收环境**：本机 dsh 0.1.1-rc.2 + 域名 `example.com` + 现有证书 `/path/to/certs/example.com/*.pem`。
 
 ## 6. 已定稿决策记录（2026-08-22）
 
 1. **F1 语义**（用户决策①）：原"启用http端口(默认开)"→ **"关闭http外网访问(默认关)"**，实现为改写 home 补丁层 webserver 行的 `host: 127.0.0.1`，重启生效。校验门与"true 时自动启动 https 服务"改挂到 F3 启用https。
 2. **F2 生效方式**（用户决策②）：保存时**自动改写 profile/机器级补丁配置**（落点为 `$DSH_HOME/cordis.patch.yml` 而非 profile 的 `cordis.patch.yml`，避免污染用户层与注释丢失），重启生效。
-3. **域名校验强度**（用户决策③）：F10 仅检查**域名可解析**，不要求解析结果指向本机网卡。
+3. **域名校验强度**（用户决策③）：F9 仅检查**域名可解析**，不要求解析结果指向本机网卡。
