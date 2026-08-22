@@ -47,8 +47,7 @@ dsh plugin --profile web add file:./dsh-https-fix
 
 ## 部署前提
 
-- 经域名访问时，设置页需要客户端 `connection.isLoopback` 放行（dsh 客户端门）。
-- 若保留外部 nginx 反代，SSE 通道需 `proxy_buffering off`。
+- 经域名访问时，设置页需要客户端 `connection.isLoopback` 放行（dsh 客户端门；插件无法自行绕过）。
 
 ## 许可
 
