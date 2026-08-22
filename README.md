@@ -11,7 +11,9 @@ DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与�
 - HTTPS 开关（默认关，开启前自动校验、通过后自动启动 HTTPS 服务）
 - HTTPS 端口（默认 3081）
 - 域名、监听地址、TLS 证书/密钥路径
-- 「校验 HTTPS 可用性」按钮（端口 / 证书配对 / 域名逐项校验并输出日志）
+- **核对版本号**（默认开；校验当前 dsh 版本与插件目标版本一致，不一致则 HTTPS 校验无法通过、无法开启 HTTPS；关闭需**三次确认**）
+- **一键打热补丁**（自动给 dsh-client-connection 打 `connection.isLoopback` 豁免，让经域名访问的设置页可用；含还原）
+- 「校验 HTTPS 可用性」按钮（版本对应 / 热补丁 / 端口 / 证书配对 / 域名逐项校验并输出日志）
 - 「保存配置」按钮
 
 详细需求与技术方案见 [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)。
@@ -47,7 +49,13 @@ dsh plugin --profile web add file:./dsh-https-fix
 
 ## 部署前提
 
-经域名访问时，dsh 客户端因 `connection.isLoopback` 判定会**禁用设置页**（settings 仅回环同源可用，插件无法自行绕过）。两种放行方式任选其一：
+经域名访问时，dsh 客户端因 `connection.isLoopback` 判定会**禁用设置页**（settings 仅回环同源可用，插件无法自行绕过）。放行方式：
+
+**推荐：在插件卡片点「一键打热补丁」**（自动完成，无需手改文件）
+
+在 设置 → 插件配置 → Https Fix 展开卡片，点「一键打热补丁」即可为当前配置的 `域名:https端口` 写入 `connection.isLoopback` 豁免，随后**刷新页面**生效（HMR 自动热更新，无需重启 dsh）。该按钮不受设置页"只读/不可用"限制。
+
+**备选：手动放行**（插件不可用时）
 
 **方式 A：经回环地址访问设置页**（无需改任何文件）
 
