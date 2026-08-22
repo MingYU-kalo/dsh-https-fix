@@ -47,7 +47,32 @@ dsh plugin --profile web add file:./dsh-https-fix
 
 ## 部署前提
 
-- 经域名访问时，设置页需要客户端 `connection.isLoopback` 放行（dsh 客户端门；插件无法自行绕过）。
+经域名访问时，dsh 客户端因 `connection.isLoopback` 判定会**禁用设置页**（settings 仅回环同源可用，插件无法自行绕过）。两种放行方式任选其一：
+
+**方式 A：经回环地址访问设置页**（无需改任何文件）
+
+用 SSH 本地转发，然后访问回环地址即可：
+
+```bash
+ssh -L 3080:127.0.0.1:3080 <用户>@<服务器>
+# 浏览器打开 http://127.0.0.1:3080
+```
+
+**方式 B：给 dsh 客户端 bundle 打补丁**（域名访问设置页也可用）
+
+编辑 dsh 安装内的 `@deepseek-ai/dsh-client-connection/lib/client.js`，找到这一行：
+
+```js
+isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)
+```
+
+在其后追加你的域名（含端口）豁免：
+
+```js
+isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname) || pageLocation.host === "你的域名:端口"
+```
+
+保存后**刷新页面**即可（客户端 bundle 变更由 dsh HMR 自动热更新，无需重启 dsh）。注意：dsh 升级会覆盖该文件，需重新打补丁。
 
 ## 许可
 
