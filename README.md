@@ -11,9 +11,10 @@ DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与�
 - HTTPS 开关（默认关，开启前自动校验、通过后自动启动 HTTPS 服务）
 - HTTPS 端口（默认 3081）
 - 域名、监听地址、TLS 证书/密钥路径
+- **自动模式（网页 token）**（默认开；适配 dsh 0.1.2+ 的网页鉴权——自动获取进程 token 并注入，浏览器直接访问 `https://域名:端口` 即可完成 token 换取 cookie；关闭则需自行使用 dsh 启动时打印的带 token URL，等同原始 http 模式）
 - **核对版本号**（默认开；校验当前 dsh 版本与插件目标版本一致，不一致则 HTTPS 校验无法通过、无法开启 HTTPS；关闭需**三次确认**）
 - **一键打热补丁**（自动给 dsh-client-connection 打 `connection.isLoopback` 豁免，让经域名访问的设置页可用；含还原）
-- 「校验 HTTPS 可用性」按钮（版本对应 / 热补丁 / 端口 / 证书配对 / 域名逐项校验并输出日志）
+- 「校验 HTTPS 可用性」按钮（版本对应 / 受信域名 / 热补丁 / 端口 / 证书配对 / 域名逐项校验并输出日志）
 - 「保存配置」按钮
 
 详细需求与技术方案见 [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md)。
@@ -23,7 +24,7 @@ DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与�
 | 分支 | 内容 |
 |------|------|
 | `main` | 最新代码（跟随 dsh 最新版本） |
-| `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.1-rc.2` |
+| `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.2-rc.1`（当前）、`dsh-0.1.1-rc.2` |
 
 ## 安装
 
@@ -49,7 +50,15 @@ dsh plugin --profile web add file:./dsh-https-fix
 
 ## 部署前提
 
-经域名访问时，dsh 客户端因 `connection.isLoopback` 判定会**禁用设置页**（settings 仅回环同源可用，插件无法自行绕过）。放行方式：
+dsh 0.1.2 起 Web 端有两道门槛，需要配套：
+
+1. **受信域名**：`/api` 与 RPC 通道的 Host/Origin 栅栏只接受回环或 `--trusted-host` 声明的权威。经域名访问必须以
+   `dsh web --trusted-host <你的域名>` 启动（写域名即可，端口可省略，匹配任意端口）。
+2. **网页 token 鉴权**：每个请求（含回环）都需携带鉴权 cookie；首次访问要经 `/?token=<进程token>` 换取。
+   插件**自动模式**开启时自动完成这一步（浏览器直接访问 `https://域名:端口` 即可）；关闭时请手动使用 `dsh web`
+   启动时打印的带 token URL。
+
+此外，dsh 客户端因 `connection.isLoopback` 判定会**禁用设置页**（settings 仅回环同源可用）。放行方式：
 
 **推荐：在插件卡片点「一键打热补丁」**（自动完成，无需手改文件）
 
@@ -68,7 +77,9 @@ ssh -L 3080:127.0.0.1:3080 <用户>@<服务器>
 
 **方式 B：给 dsh 客户端 bundle 打补丁**（域名访问设置页也可用）
 
-编辑 dsh 安装内的 `@deepseek-ai/dsh-client-connection/lib/client.js`，找到这一行：
+编辑 dsh 安装内的 `@deepseek-ai/dsh-client-connection/lib/client.js`，找到 `isLoopback:` 那一行
+（dsh 0.1.2 为 `isLoopback: transport?.ownsHost === true || pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)`，
+0.1.1 为 `isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)`）：
 
 ```js
 isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)
