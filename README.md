@@ -4,6 +4,74 @@
 
 DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与可配置管理**。
 
+---
+
+## 🚨 必须使用与 dsh 版本对应的插件版本，否则 dsh 会不可用
+
+本插件深度依赖 dsh **内部 API**（`settings.installSection`、`connection.fetch.register`、`webServer`、`clientModules` 等导出与服务）。
+dsh 每个版本都可能改动这些接口。**插件版本与 dsh 版本不一致时，后果不是"插件功能失效"，而是整个 dsh 不可用：**
+
+| 不匹配发生在 | dsh 的实际表现 | 依据（dsh 源码） |
+|---|---|---|
+| **启动加载期**：导入不存在的导出、`inject` 的服务在该版本不存在、`apply` 抛错 | **dsh 启动直接失败，Web GUI 完全打不开**；终端报 `dsh: plugin(s) failed to load: …` 或 `dsh: 1 entry did not activate …` | `dsh-app-boot` 的 `assertEntriesActivated()` 在 boot 结束前审计整棵插件树，任一启用条目未激活即抛错、终止启动 |
+| **运行期**：版本差异导致插件漏出未处理的 Promise rejection | 正常运行一段时间后**整个进程突然退出**，终端最后一行 `dsh: fatal load failure: <stack>` | `dsh-app-boot` 的 `installFailLoud()` 给进程注册了 `unhandledRejection` 处理器，命中即写 stderr 并 `process.exit(1)` |
+
+### 三条硬性规则
+
+1. **装之前先核对版本**：`dsh --version`，然后安装**同名分支**（见下表）。不要凭插件版本号或"最新 main"去装。
+2. **升级 dsh 之前，先更新插件到对应分支，或先禁用/卸载插件**。绝不能让旧插件留在原地、跟着新 dsh 一起启动。
+3. 插件卡片里的「核对版本号」（默认开启）只是**第二道保险**：它只有在插件已成功加载之后才能校验，**挡不住上面两种不可用**。关闭它需要三次确认，请不要关。
+
+### 版本对应表
+
+| dsh 版本 | 插件分支（装这个） | 插件版本 | 元数据 `dshhub.compatibility.dsh` |
+|---|---|---|---|
+| `0.1.5-alpha.1`（当前） | `dsh-0.1.5-alpha.1`、`main` | 0.1.1-rc.4 | `0.1.5-alpha.1` |
+| `0.1.2-rc.1` | `dsh-0.1.2-rc.1` | 0.1.1-rc.3 | `>=0.1.1-rc.2` |
+| `0.1.1-rc.2` | `dsh-0.1.1-rc.2` | 0.1.1-rc.3 | `>=0.1.1-rc.2` |
+
+> **以分支名为准**（分支名 = 目标 dsh 版本）。插件 `version` 字段在多个分支上可能重复，**不能**用它判断兼容性。
+
+### dsh 已经起不来时怎么自救
+
+`dsh plugin` 是 pnpm 直通命令，**dsh web 起不来也能执行**：
+
+```bash
+# 方式 1：卸载插件
+dsh plugin --profile web remove dsh-https-fix
+
+# 方式 2：不卸载，只在补丁里禁用这一行
+#   编辑 $DSH_HOME/profiles/web/cordis.patch.yml
+```
+
+```yaml
+- insert:
+    - id: https-fix
+      name: dsh-https-fix
+      disabled: true
+```
+
+改完重启 dsh web 即可恢复。
+
+### 升级 dsh 的标准流程
+
+```bash
+# 1. 看当前版本，记住它
+dsh --version
+
+# 2. 升级 dsh
+npm i -g @deepseek-ai/dsh@<新版本>
+
+# 3. 立刻把插件切到对应分支（若该分支尚未存在，说明作者还没适配：先禁用插件再启动）
+dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-<新版本>
+
+# 4. 确认插件已启用，再启动 dsh web
+```
+
+---
+
+## 功能
+
 在 **设置 → 插件配置 → Https Fix** 中统一管理：
 
 - 关闭 http 外网访问（默认关；改写 `$DSH_HOME/cordis.patch.yml`，重启生效）
@@ -26,16 +94,24 @@ DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与�
 | `main` | 最新代码（跟随 dsh 最新版本） |
 | `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.5-alpha.1`（当前）、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
+具体版本对应关系见上文[版本对应表](#版本对应表)。
+
 ## 安装
 
 > 本插件**未发布到 npm**，请从 Git 或本地路径安装。
+
+**第 0 步（不可跳过）：核对版本**
+
+```bash
+dsh --version    # 必须与你要安装的分支名一致
+```
 
 按 dsh 版本安装对应冻结分支（推荐，与你的 dsh 版本严格对应）：
 
 ```bash
 # dsh 0.1.5-alpha.1 对应分支（当前）
 dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-0.1.5-alpha.1
-# 或始终追随最新代码（main，可能超前于你的 dsh 版本）
+# 或始终追随最新代码（main，可能超前于你的 dsh 版本 → 见开头的版本警告）
 dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#main
 ```
 
@@ -47,6 +123,7 @@ dsh plugin --profile web add file:./dsh-https-fix
 ```
 
 安装完成后**重启 dsh web** 生效；插件出现在 设置 → 插件配置 → Https Fix。
+若重启后 dsh 直接起不来，说明版本不匹配，按[自救步骤](#dsh-已经起不来时怎么自救)处理。
 
 ## 部署前提
 
@@ -54,6 +131,8 @@ dsh 0.1.2 起 Web 端有两道门槛，需要配套：
 
 1. **受信域名**：`/api` 与 RPC 通道的 Host/Origin 栅栏只接受回环或 `--trusted-host` 声明的权威。经域名访问必须以
    `dsh web --trusted-host <你的域名>` 启动（写域名即可，端口可省略，匹配任意端口）。
+   本插件在加载后会自动把配置里的域名注册进 `trustedHosts`（等价 `--trusted-host`），**因此裸 `dsh web` 启动也能经域名访问**；
+   但仍建议显式带上 `--trusted-host` 作为兜底。
 2. **网页 token 鉴权**：每个请求（含回环）都需携带鉴权 cookie；首次访问要经 `/?token=<进程token>` 换取。
    插件**自动模式**开启时自动完成这一步（浏览器直接访问 `https://域名:端口` 即可）；关闭时请手动使用 `dsh web`
    启动时打印的带 token URL。
@@ -95,6 +174,11 @@ isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)
 
 ## 故障排查
 
+### dsh 启动直接失败：`plugin(s) failed to load` / `entry did not activate`
+
+**第一嫌疑是版本不匹配**，见开头[版本警告](#-必须使用与-dsh-版本对应的插件版本否则-dsh-会不可用)。
+先 `dsh --version` 与插件分支名核对；确认无误后，再按提示的插件名排查该插件的导出/`inject` 是否与当前 dsh 一致。
+
 ### dsh 跑一会儿整个进程退出：`dsh: fatal load failure: …`
 
 **根因在 dsh 本身**：`@deepseek-ai/dsh-app-boot` 给进程注册了 `installFailLoud`（`unhandledRejection` 处理器），
@@ -112,7 +196,7 @@ isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)
 
 ### 经域名访问 403 / 设置页不可用
 
-见上文「部署前提」：`--trusted-host` 与「一键打热补丁」两项都要做。卡片里的「校验 HTTPS 可用性」会逐项给出结论。
+见上文「部署前提」：`--trusted-host`（或让插件自动注册）与「一键打热补丁」两项都要做。卡片里的「校验 HTTPS 可用性」会逐项给出结论。
 
 ## 许可
 
