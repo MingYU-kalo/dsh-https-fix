@@ -24,7 +24,7 @@ DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与�
 | 分支 | 内容 |
 |------|------|
 | `main` | 最新代码（跟随 dsh 最新版本） |
-| `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.2-rc.1`（当前）、`dsh-0.1.1-rc.2` |
+| `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.5-alpha.1`（当前）、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
 ## 安装
 
@@ -33,8 +33,8 @@ DeepSeek Harness (dsh) 插件：为 dsh Web GUI 提供**内置 HTTPS 反代与�
 按 dsh 版本安装对应冻结分支（推荐，与你的 dsh 版本严格对应）：
 
 ```bash
-# dsh 0.1.1-rc.2 对应分支
-dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-0.1.1-rc.2
+# dsh 0.1.5-alpha.1 对应分支（当前）
+dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-0.1.5-alpha.1
 # 或始终追随最新代码（main，可能超前于你的 dsh 版本）
 dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#main
 ```
@@ -92,6 +92,27 @@ isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)
 ```
 
 保存后**刷新页面**即可（客户端 bundle 变更由 dsh HMR 自动热更新，无需重启 dsh）。注意：dsh 升级会覆盖该文件，需重新打补丁。
+
+## 故障排查
+
+### dsh 跑一会儿整个进程退出：`dsh: fatal load failure: …`
+
+**根因在 dsh 本身**：`@deepseek-ai/dsh-app-boot` 给进程注册了 `installFailLoud`（`unhandledRejection` 处理器），
+**任何插件漏出的未处理 Promise rejection 都会打印 `dsh: fatal load failure: <stack>` 并 `process.exit(1)`**。
+它发生在「启动完成之后」，所以表现为 dsh 正常跑一段时间后突然整个进程消失；"load failure" 这个措辞是误导，并不代表插件树加载失败。
+
+排查步骤：
+
+1. 让 dsh 的 stdout/stderr 落盘，例如 `dsh web --trusted-host <域名> 2>&1 | tee dsh-web.log`；崩溃时最后一行就是真实栈。
+2. 若栈指向本插件：**0.1.1-rc.4 起已修复**。插件内所有异步入口——60 秒证书热重载定时器、settings `onChange`、
+   RPC 处理器、HTTPS 请求/升级/TLS 握手回调，以及代理内部的 `httpRequest`（对非法头/路径会同步抛出）——全部就地
+   收敛为日志；出问题时只会看到 `[https-fix] … 异常: <stack>`，服务继续运行。
+3. 若栈指向别的插件，按同一原则修：`void (async () => …)()`、`onChange: () => asyncFn()`、事件回调里的 `async`
+   都必须自带 `.catch()` 或 `try/catch`。
+
+### 经域名访问 403 / 设置页不可用
+
+见上文「部署前提」：`--trusted-host` 与「一键打热补丁」两项都要做。卡片里的「校验 HTTPS 可用性」会逐项给出结论。
 
 ## 许可
 
