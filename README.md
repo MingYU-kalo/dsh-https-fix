@@ -26,11 +26,13 @@ dsh 每个版本都可能改动这些接口。**插件版本与 dsh 版本不一
 
 | dsh 版本 | 插件分支（装这个） | 插件版本 | 元数据 `dshhub.compatibility.dsh` |
 |---|---|---|---|
-| `0.1.5-alpha.1`（当前） | `dsh-0.1.5-alpha.1`、`main` | 0.1.1-rc.4 | `0.1.5-alpha.1` |
-| `0.1.2-rc.1` | `dsh-0.1.2-rc.1` | 0.1.1-rc.3 | `>=0.1.1-rc.2` |
-| `0.1.1-rc.2` | `dsh-0.1.1-rc.2` | 0.1.1-rc.3 | `>=0.1.1-rc.2` |
+| `0.1.5-rc.1`（当前） | `dsh-0.1.5-rc.1`、`main` | 0.1.5-rc.1 | `0.1.5-rc.1` |
+| `0.1.5-alpha.1` | `dsh-0.1.5-alpha.1` | 0.1.5-alpha.1 | `0.1.5-alpha.1` |
+| `0.1.2-rc.1` | `dsh-0.1.2-rc.1` | 0.1.2-rc.1 | `0.1.2-rc.1` |
+| `0.1.1-rc.2` | `dsh-0.1.1-rc.2` | 0.1.1-rc.2 | `0.1.1-rc.2` |
 
-> **以分支名为准**（分支名 = 目标 dsh 版本）。插件 `version` 字段在多个分支上可能重复，**不能**用它判断兼容性。
+> **版本号规则：插件 `version` = 分支名 = 目标 dsh 版本号**（例如分支 `dsh-0.1.5-rc.1` 的 `version` 就是 `0.1.5-rc.1`），**不存在独立的插件版本号**。
+> 因此 `dsh --version` 的输出应当与 `package.json` 的 `version` 字段完全一致；不一致就是装错了分支。
 
 ### dsh 已经起不来时怎么自救
 
@@ -92,7 +94,7 @@ dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-<新版本>
 | 分支 | 内容 |
 |------|------|
 | `main` | 最新代码（跟随 dsh 最新版本） |
-| `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.5-alpha.1`（当前）、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
+| `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.5-rc.1`（当前）、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2`；分支名即插件版本号 |
 
 具体版本对应关系见上文[版本对应表](#版本对应表)。
 
@@ -109,8 +111,8 @@ dsh --version    # 必须与你要安装的分支名一致
 按 dsh 版本安装对应冻结分支（推荐，与你的 dsh 版本严格对应）：
 
 ```bash
-# dsh 0.1.5-alpha.1 对应分支（当前）
-dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-0.1.5-alpha.1
+# dsh 0.1.5-rc.1 对应分支（当前）
+dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-0.1.5-rc.1
 # 或始终追随最新代码（main，可能超前于你的 dsh 版本 → 见开头的版本警告）
 dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#main
 ```
@@ -141,7 +143,9 @@ dsh 0.1.2 起 Web 端有两道门槛，需要配套：
 
 **推荐：在插件卡片点「一键打热补丁」**（自动完成，无需手改文件）
 
-在 设置 → 插件配置 → Https Fix 展开卡片，点「一键打热补丁」即可为当前配置的 `域名:https端口` 写入 `connection.isLoopback` 豁免，随后**刷新页面**生效（HMR 自动热更新，无需重启 dsh）。该按钮不受设置页"只读/不可用"限制。
+在 设置 → 插件配置 → Https Fix 展开卡片，点「一键打热补丁」即可为当前配置的**域名**写入 `connection.isLoopback` 豁免，随后**刷新页面**生效（HMR 自动热更新，无需重启 dsh）。该按钮不受设置页"只读/不可用"限制。
+
+> 豁免按 **hostname** 匹配（端口无关）：域名前面挂 nginx 等前置代理时，浏览器地址栏端口（对外端口）与本插件 `httpsPort` 可以不同，按 `域名:端口` 匹配会漏豁免。旧部署写入的 `pageLocation.host === "域名:端口"` 形式仍然兼容，「还原补丁」会把两种形式一并清掉。
 
 **备选：手动放行**（插件不可用时）
 
@@ -164,11 +168,13 @@ ssh -L 3080:127.0.0.1:3080 <用户>@<服务器>
 isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)
 ```
 
-在其后追加你的域名（含端口）豁免：
+在其后追加你的域名豁免（推荐按 hostname，端口无关）：
 
 ```js
-isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname) || pageLocation.host === "你的域名:端口"
+isLoopback: transport?.ownsHost === true || pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname) || pageLocation.hostname === "你的域名"
 ```
+
+若你的浏览器访问端口与插件监听端口一致，也可用带端口的形式 `|| pageLocation.host === "你的域名:端口"`（插件两种都认）。
 
 保存后**刷新页面**即可（客户端 bundle 变更由 dsh HMR 自动热更新，无需重启 dsh）。注意：dsh 升级会覆盖该文件，需重新打补丁。
 
@@ -188,7 +194,7 @@ isLoopback: pageLocation === void 0 || isLoopbackHostname(pageLocation.hostname)
 排查步骤：
 
 1. 让 dsh 的 stdout/stderr 落盘，例如 `dsh web --trusted-host <域名> 2>&1 | tee dsh-web.log`；崩溃时最后一行就是真实栈。
-2. 若栈指向本插件：**0.1.1-rc.4 起已修复**。插件内所有异步入口——60 秒证书热重载定时器、settings `onChange`、
+2. 若栈指向本插件：**`dsh-0.1.5-alpha.1` / `dsh-0.1.5-rc.1` 分支起已修复**。插件内所有异步入口——60 秒证书热重载定时器、settings `onChange`、
    RPC 处理器、HTTPS 请求/升级/TLS 握手回调，以及代理内部的 `httpRequest`（对非法头/路径会同步抛出）——全部就地
    收敛为日志；出问题时只会看到 `[https-fix] … 异常: <stack>`，服务继续运行。
 3. 若栈指向别的插件，按同一原则修：`void (async () => …)()`、`onChange: () => asyncFn()`、事件回调里的 `async`
