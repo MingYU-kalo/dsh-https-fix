@@ -1,6 +1,6 @@
 {
   "name": "dsh-https-fix",
-  "version": "0.1.1-rc.4",
+  "version": "0.1.5-alpha.1",
   "description": "DeepSeek Harness 插件:内置 HTTPS 反向代理与统一配置管理。在 设置→插件配置→Https Fix 中配置关闭 http 外网访问、http/https 端口、域名、TLS 证书密钥路径,并提供校验与保存。Built-in HTTPS reverse proxy for dsh Web GUI with in-app configuration (block external http, http/https ports, domain, TLS cert/key) plus validate & save actions.",
   "type": "module",
   "main": "lib/index.js",
