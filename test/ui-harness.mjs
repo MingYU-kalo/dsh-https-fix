@@ -31,7 +31,7 @@ dom.window.confirm = () => { confirmCount++; return true }
 
 let snapshot = {
   status: "ready", writable: true, revision: 3, mode: "host",
-  value: { enableHttps: true, domain: "old.example.com", httpsPort: 3081, address: "", certPath: "", keyPath: "", autoToken: true, versionCheck: true, blockHttpExternalAccess: false },
+  value: { enableHttps: true, domain: "old.example.com", httpsPort: 3081, address: "", certPath: "", keyPath: "", autoToken: true, versionCheck: true, blockHttpExternalAccess: false, loginEnabled: true, loginUser: "admin", loginPasswordHash: "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918" },
   base: { httpPort: 3080 },
   user: { domain: "old.example.com" }
 }
@@ -177,6 +177,27 @@ check("选候选后填入并收起候选行", domainBox().value === "172.17.0.1"
 statusValue = { ...statusValue, serverIps: [] }
 await refreshStatusViaValidate()
 check("无服务器 IP 时按钮禁用", byText("button", "填入服务器 IP").disabled === true)
+
+// 登录设置(密码只暂存 SHA-256)
+const sha256 = (t) => require("crypto").createHash("sha256").update(t, "utf8").digest("hex")
+const DEFAULT_HASH = sha256("admin")
+check("登录三项设置都在", ["启用登录", "登录账号", "登录密码"].every((l) => $$("label.hf_label").some((x) => x.textContent === l)), $$("label.hf_label").map((x) => x.textContent).join(","))
+check("初始显示默认密码状态", $$("span").some((s) => s.textContent === "当前:默认密码(admin)"))
+const pwBox = $("#" + labelFor("登录密码"))
+check("密码框是 password 类型", pwBox.type === "password")
+await act(async () => { Simulate.change(pwBox, { target: { value: "newpass123" } }) })
+await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+check("输入新密码提示待保存", $$("span").some((s) => s.textContent === "新密码已记录,保存后生效"))
+check("输入后显示自定义密码状态", $$("span").some((s) => s.textContent === "当前:自定义密码"))
+await act(async () => { byText("button", "保存配置").click() })
+await flush()
+check("保存写入的是 SHA-256 而不是明文", calls.some((c) => c[0] === "set" && c[1] === "loginPasswordHash" && c[2] === sha256("newpass123")), JSON.stringify(calls.filter((c) => c[0] === "set" && c[1] === "loginPasswordHash")))
+check("保存后密码框清空", pwBox.value === "")
+await act(async () => { byText("button", "重置为默认密码").click() })
+await act(async () => { byText("button", "保存配置").click() })
+await flush()
+check("重置为默认密码写入默认哈希", calls.some((c) => c[0] === "set" && c[1] === "loginPasswordHash" && c[2] === DEFAULT_HASH))
+check("退出登录按钮存在", !!byText("button", "退出登录"))
 
 // 只读
 snapshot = { ...snapshot, writable: false }

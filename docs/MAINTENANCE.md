@@ -16,7 +16,7 @@
 | 当前适配的 dsh | `0.1.5-rc.2` |
 | 对应分支 | `dsh-0.1.5-rc.2`（= `main`） |
 | 插件版本 | `0.1.5-rc.2` |
-| 代码规模 | `lib/index.js` 847 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/client.js` 538 行；`test/ui-harness.mjs` 195 行（卡片回归测试，38 项断言） |
+| 代码规模 | `lib/index.js` 1033 行、`lib/client.js` 606 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/auth.js` 111 行、`lib/login-page.js` 97 行；`test/ui-harness.mjs` 216 行（卡片回归测试，47 项断言） |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
 | 冻结分支 | `dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
@@ -41,7 +41,7 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 | 3 | 浏览器端 `isLoopback` 判定为假 → 设置页显示"在此浏览器不可用" | 对 dsh 的**客户端 bundle 文件**打运行时热补丁，追加一条 `pageLocation.hostname === "<域名>"` 豁免 |
 | 4 | 首次访问要带 token，直接开域名会出现 303 重定向循环 | 插件**在服务端**用进程 token 换出会话 cookie，注入上游并同时下发给浏览器 |
 
-另外三个附加能力：
+另外四个附加能力：
 - **机器级补丁托管**：`blockHttpExternalAccess` 开启时，往 `$DSH_HOME/cordis.patch.yml` 写一条 `webserver` 行覆盖（`host: 127.0.0.1`）；`httpPort` 与实际端口不同时也写 `port`。
 - **版本核查**：`versionCheck` 开启（默认）时，dsh 版本与 `TARGET_DSH_VERSION` 不一致就拒绝启动 HTTPS（见第 6 节）。
 - **无域名自签证书**：`domain` 填 IP、证书路径留空时，插件用纯 Node 生成/复用一张覆盖「该 IP + 回环」的自签证书（`lib/self-signed.js`），不需要 ACME、不需要域名（见第 2、9 节）。
@@ -52,60 +52,58 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 
 ### `lib/index.js`（host 半边，插件主体）
 
-| 行号 | 符号 | 职责 |
-|---|---|---|
-| 34 / 37 | `name` / `inject` | `inject = ["webServer", "clientModules", "connection"]` |
-| 40 | `NS` | settings 命名空间 `https-fix` |
-| 46–57 | `Config` | zod schema，同时也是 settings 命名空间 schema（10 个字段） |
-| 60 | `TARGET_DSH_VERSION` | **适配新 dsh 版本时要改的第一处** |
-| 66–69 | `LOOPBACK_TARGET_LINES` | 客户端 bundle 里 `isLoopback` 行的候选字面量（**第二处**） |
-| 75 | `exemptionPattern()` | 匹配已写入的豁免片段，新老形式都认 |
-| 80 / 86 | `normalizeVersion()` / `runningDshVersion()` | 去掉 `v` 前缀与 `+build`，再与目标版本精确比对 |
-| 96 / 100 | `dshHome()` / `patchFilePath()` | `$DSH_HOME`（默认 `~/.dsh`）与机器级补丁路径 |
-| 105 / 119 | `isPrivateIPv4()` / `serverIPv4Addresses()` | 「填入服务器 IP」的数据源：直接枚举网卡（IPv4、非 internal），带 `{iface, address, private}`、公网优先排序；**只收 IPv4**（IPv6 方括号语义在 Host/trustedHosts/SAN 三处不一致） |
-| 137 | `certDir()` | 自签证书目录 `$DSH_HOME/https-fix/` |
-| 147 / 156 / 165 / 170 | `certificateMode()` / `certificateHosts()` / `autoCertificate()` / `loadCertificate()` | 证书来源判定（`paths` / `auto` / `invalid`）、自签要覆盖的名字、生成或复用自签、装配监听用的证书材料 |
-| 191 | `apply(ctx, config)` | 全部逻辑的入口 |
-| 208 | `safeSource()` | 读 settings 生效值，失败回退到组成配置 |
-| 223 | `report(label, err)` | 异常收敛：写 `ctx.logger` + 去重 `console.warn` |
-| 241 | `guard(label, fn)` | **异步/同步异常统一兜底，见第 6 节红线** |
-| 258 | `currentToken()` | 取进程 token（`connection.authenticatedUrl`，5 秒缓存） |
-| 274 / 282 | `stopServer()` / `startServer()` | HTTPS 服务生命周期；`startServer` 里把 5 类回调异常全部就地收敛，并记录 `activeCert` / `startedSignature` |
-| 350 / 356 | `wantHttps(cfg)` / `serverSignature(cfg)` | 是否该起 HTTPS（证书路径"成对填或都留空"）；影响监听的配置签名 |
-| 370 | `versionCheckResult(cfg)` | 版本核查，返回 `{ok, msg, block}` |
-| 379 | `reconcile()` | **配置变更的统一收敛点**（见第 3 节）；签名变了先停再起 |
-| 405 / 416 | `readPatchEntries()` / `writePatchOverride()` | 机器级补丁层读写 |
-| 441 | `ctx.inject(["settings"], …)` | 注册 settings 命名空间（`settings.installSection`） |
-| 449–470 | 证书热重载定时器 | 60 秒一轮：文件证书按 mtime/size；自签证书按内容变化（hosts 变了或临近过期会重签）；`unref()` 不阻止进程退出 |
-| 488 | dispose | 卸载时关闭 HTTPS 监听 |
-| 495–501 | `RPC_ROUTES` | 5 个端点 → endpoint 名 |
-| 507 / 537 | `rpcResponse()` / 注册循环 | `connection.fetch.register({path, methods:["POST"], requestBody:"buffered"})` |
-| 545 | `statusView()` | `status` 端点的返回体（含 `certSource` / `certPath` / `serverIps`） |
-| 568 | `loopbackBundlePath()` | 用 `clientModules.clientPath("@deepseek-ai/dsh-client-connection")` 定位 bundle |
-| 585 / 592 / 608 | `loopbackExemption()` / `exemptionPresent()` / `loopbackPatchTarget()` | 热补丁的生成、查重、定位（域名或 IP 都可以） |
-| 616 / 632 / 646 | `patchLoopback()` / `revertLoopback()` / `patchStatus()` | 打补丁 / 还原 / 查状态 |
-| 667 / 689 | `ensureTrustedHost()` / `trustedHostCheck()` | 运行时注册域名/IP + 校验用检查 |
-| 706 | `runValidation(cfg)` | 11 项校验的编排 |
-| 726 | `hotPatchCheck()` | 校验里附带的热补丁状态项 |
-| 741 / 761 / 825 / 835 | `checkPort` / `checkTls` / `checkDomain` / `checkHttpUp` | 四个子检查；`checkTls` 同时支持路径证书与自动自签，名字匹配交给 `X509Certificate.checkHost/checkIP` |
+| 符号 | 职责 |
+|---|---|
+| `name` / `inject` | `inject = ["webServer", "clientModules", "connection"]` |
+| `NS` | settings 命名空间 `https-fix` |
+| `Config` | zod schema（组成配置与 settings 命名空间共用；字段 F1–F13 见行内注释） |
+| `TARGET_DSH_VERSION` | **适配新 dsh 版本时要改的第一处** |
+| `LOOPBACK_TARGET_LINES` | 客户端 bundle 里 `isLoopback` 行的候选字面量（**第二处**） |
+| `exemptionPattern()` | 匹配已写入的豁免片段，新老形式都认 |
+| `normalizeVersion()` / `runningDshVersion()` | 去掉 `v` 前缀与 `+build`，再与目标版本精确比对 |
+| `dshHome()` / `patchFilePath()` / `certDir()` | `$DSH_HOME`、机器级补丁路径、自签证书与 `session.key` 所在目录 |
+| `isPrivateIPv4()` / `serverIPv4Addresses()` | 「填入服务器 IP」的数据源：枚举非回环 IPv4，返回 `{iface,address,private}`、公网优先；**只收 IPv4**（IPv6 方括号语义在 Host/trustedHosts/SAN 三处不一致） |
+| `certificateMode()` / `certificateHosts()` / `autoCertificate()` / `loadCertificate()` | 证书来源判定（`paths`/`auto`/`invalid`）、自签覆盖的名字、生成或复用自签、装配监听证书 |
+| `apply(ctx, config)` | 全部逻辑的入口 |
+| `safeSource()` | 读 settings 生效值，失败回退到组成配置 |
+| `report(label, err)` | 异常收敛：写 `ctx.logger` + 去重 `console.warn` |
+| `guard(label, fn)` | **异步/同步异常统一兜底，见第 6 节红线** |
+| `currentToken()` | 取进程 token（`connection.authenticatedUrl`，5 秒缓存） |
+| `getSessionSecret()` / `authConfig()` / `hasValidSession()` | 登录：会话密钥（`$DSH_HOME/https-fix/session.key`，0600，进程内缓存）、当前账号与密码哈希、请求是否已登录 |
+| `handleAuthRequest(req, res)` | **登录门 + 插件自有路径**（`/__https-fix/login`、`/__https-fix/logout`）；返回 true = 已响应，不再转发 |
+| `stopServer()` / `startServer()` | HTTPS 生命周期；5 类回调异常就地收敛，记录 `activeCert`/`startedSignature`；request 回调查登录门后再转发，upgrade 回调同样要求有效会话 |
+| `wantHttps(cfg)` / `serverSignature(cfg)` | 是否该起 HTTPS（证书路径"成对填或都留空"）；影响监听的配置签名 |
+| `versionCheckResult(cfg)` / `reconcile()` | 版本核查；**配置变更的统一收敛点**（签名变了先停再起） |
+| `readPatchEntries()` / `writePatchOverride()` | 机器级补丁层读写 |
+| `settings.installSection` 注册 | `ctx.inject(["settings"], …)` |
+| 证书热重载定时器 | 60 秒一轮：文件证书按 mtime/size；自签证书按内容变化；`unref()` 不阻止进程退出 |
+| `RPC_ROUTES` / `rpcResponse()` / 注册循环 | 5 个端点 → `connection.fetch.register({path, methods:["POST"], requestBody:"buffered"})` |
+| `statusView()` | `status` 返回体（`certSource`/`certPath`/`serverIps`/`loginEnabled`/`loginUser`/`loginUsesDefaultPassword`） |
+| `loopbackBundlePath()` / `loopbackExemption()` / `exemptionPresent()` / `loopbackPatchTarget()` | 热补丁定位、生成、查重 |
+| `patchLoopback()` / `revertLoopback()` / `patchStatus()` | 打补丁 / 还原 / 查状态（域名或 IP 都行） |
+| `ensureTrustedHost()` / `trustedHostCheck()` | 运行时注册域名/IP + 校验用检查 |
+| `runValidation()` / `hotPatchCheck()` | **12 项**校验编排 + 热补丁状态项（登录项在内） |
+| `checkPort` / `checkTls` / `checkDomain` / `checkHttpUp` | 四个子检查；`checkTls` 同时支持路径证书与自动自签，名字匹配交给 `X509Certificate.checkHost/checkIP` |
+
+> **行号会漂移，这里只列符号**：要改哪块直接 `grep -n <符号名> lib/index.js`（旧版文档维护过的行号在两次功能追加后已全部失效）。
 
 ### `lib/client.js`（浏览器半边）
 
 - 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "settingsScope"]`。
-- 向 `settings.plugin.item` 槽注册**折叠卡片**；`apply()` 在 524 行，卡片主体 `HttpsFixCard` 在 177–522 行。
+- 向 `settings.plugin.item` 槽注册**折叠卡片**：`apply()` 注册，`HttpsFixCard` 是主体。
 - 卡片结构：
   - 头部：标题 + **实时状态徽标**（挂载 / 校验后 / 保存后调 `/api/https-fix/status`，显示「运行中 域名:端口 · 自签|自有证书」/「HTTPS 未启用」/「设置不可用」）+「未保存」+ 折叠箭头。
-  - 展开后四组 `Section`（112 行）：**HTTPS 服务**（启用 / 域名或 IP +「填入当前地址」+「填入服务器 IP」/ https 端口 / 监听地址 / 访问入口预览）、**TLS 证书**（`Choice` 单选「自动自签 ↔ 自定义路径」，路径字段只在自定义模式出现）、**访问与安全**（自动模式 / 关闭 http 外网访问 / http 端口 / 核对版本号）、**诊断**（校验、热补丁、结果汇总、热补丁状态）。
+  - 展开后四组 `Section`：**HTTPS 服务**（启用 / 域名或 IP +「填入当前地址」+「填入服务器 IP」/ https 端口 / 监听地址 / 访问入口预览）、**TLS 证书**（`Choice` 单选「自动自签 ↔ 自定义路径」）、**访问与安全**（登录开关 / 登录账号 / 登录密码 / 自动模式 / 关闭 http 外网访问 / http 端口 / 核对版本号）、**诊断**（校验、热补丁、结果汇总）。
   - 页脚：「有 N 项改动未保存」+「放弃修改」+「保存配置」。
-- 视图原语在 104–175 行：`Chevron` / `Section` / `Field` / `Checkbox` / `TextInput` / `NumberInput` / `Choice`；样式全在文件顶部 `cssText`（25 行起，`hf_*` 类名，复用 `--dsw-*` 令牌），**不引入额外 CSS 文件**。
+- 视图原语：`Chevron` / `Section` / `Field` / `Checkbox` / `TextInput`（支持 `type`）/ `NumberInput` / `Choice`；样式全在文件顶部 `cssText`（`hf_*` 类名，复用 `--dsw-*` 令牌），**不引入额外 CSS 文件**。
 - 数据通道：
-  - 读 `settingsScope` 快照：`value`（生效值）/ `user`（用户层，用来决定某项能否「恢复默认」）/ `base`（组成层，http 端口占位符）/ `writable` / `status`。
-  - **两个「填入」按钮**：「填入当前地址」= `window.location.hostname`（浏览器地址栏，不含端口，IPv6 保持方括号原样）；「填入服务器 IP」= host 侧 `serverIPv4Addresses()` 经 `status.serverIps` 下发的 `{iface,address,private}[]`，唯一候选直接填、多个候选展开一行带网卡名的按钮（公网优先），无候选时按钮禁用。
-  - 写：`staged` 暂存（189 行），保存时逐字段 `controller.set`（264 行）；「恢复默认」= `controller.unset(field)`（292 行，老 dsh 没有该方法时按钮自动隐藏）。
-  - RPC 统一走 `rpc()`（220 行）→ `/api/https-fix/<endpoint>`。
-- **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()`（210 行）归一——早期版本没归一，补丁结果显示成「✗ undefined」。
+  - 读 `settingsScope` 快照：`value`（生效值）/ `user`（用户层，决定能否「恢复默认」）/ `base`（组成层，http 端口占位符）/ `writable` / `status`。
+  - 写：`staged` 暂存，保存时逐字段 `controller.set`；「恢复默认」= `controller.unset(field)`（老 dsh 没有该方法时按钮自动隐藏）；RPC 统一走 `rpc()`。
+  - **两个「填入」按钮**：「填入当前地址」= `window.location.hostname`（不含端口，IPv6 保持方括号原样）；「填入服务器 IP」= `status.serverIps`（host 侧网卡枚举，`{iface,address,private}[]`，唯一候选直填、多候选展开带网卡名的按钮）。
+  - **登录密码**：输入后立刻用 Web Crypto 算 SHA-256（`sha256Hex()`，模块级函数），只把哈希 stage 进 `loginPasswordHash`；明文只留在输入框、保存后清空。「重置为默认密码」写入常量 `DEFAULT_PW_HASH`（= sha256("admin")）；「退出登录」直接跳 `/__https-fix/logout`。
+- **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()` 归一——早期版本没归一，补丁结果显示成「✗ undefined」。
 - **布局不变量**：一行一个设置，禁止任何并排容器（`hf_grid` 已删）；每个 `Field` 必须是 `Section` 的直接子元素（`React.Fragment` 包一层可以，它不产生 DOM 节点）。`test/ui-harness.mjs` 有对应断言。
-- **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）；改完请跑第 8 节的 `test/ui-harness.mjs`。
+- **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）；改完请跑第 8 节的 `test/ui-harness.mjs`（47 项断言）。
 
 ### `lib/self-signed.js`（零依赖自签证书）
 
@@ -115,6 +113,21 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
   - **改这里最容易踩坑**：SAN 里 dNSName 必须是 `[2]`（tag `0x82`）、iPAddress 是 `[7]`（tag `0x87`）。写成普通 IA5String（`0x16`）时 OpenSSL 不会报错，而是**整段 SAN 当不存在**——`checkIP` 恒失败、浏览器域名校验失败，只有 `openssl x509 -text` 才看得出来。
 - `ensureSelfSignedCertificate({dir, hosts, days, renewDays})`（237 行）：按 `self-signed.json` 里的 hosts 指纹复用；hosts 变了或剩余有效期 < `renewDays`（默认 30 天）就重签。证书 0644、私钥 0600、目录 0700，写入一律"临时文件 + rename"，避免读者看到半截文件。
 - 落盘位置 `$DSH_HOME/https-fix/`；SAN 固定包含「配置的域名/IP + `127.0.0.1` + `localhost`」。
+
+### `lib/auth.js`（登录核心，零依赖）
+
+- `sha256Hex(text)` / `defaultPasswordHash()`：SHA-256 十六进制；默认密码 `admin` 的哈希是 `8c6976e5…a918`。
+- `issueSession({secret,user,ttlMs})` / `verifySession({secret,token,user})`：无状态 HMAC-SHA256 令牌，payload = `v1|user|expMs`；校验签名、过期时间、账号是否与当前配置一致，任何异常都返回 false。
+- `safeEqualHex(a,b)`：`timingSafeEqual` 定长比较（账号与密码比较都走它）。
+- `readCookie(header,name)`：从 Cookie 头取值。
+- `loadOrCreateSecret({dir,fs,join})`：读或生成会话密钥（`session.key`，64 位十六进制，0600）；写失败时调用方兜底成进程内随机密钥。
+
+### `lib/login-page.js`（登录页）
+
+- `loginPageHtml({error,user,next})`：单文件 HTML（内联 CSS、零 JS，纯服务端渲染）。视觉照抄 dsh 主题令牌取值：深色 `#151517`/`#2c2c2e`/文本 `#f9fafb`/边框 `#ffffff1f`；浅色 `#fff`/`#0f1115`/边框 `#0000001a`；主按钮 = dsh 的 brand-primary（深色白底黑字、浅色黑底白字），强调色 `#4176e6`，字体栈与 dsh 一致，`prefers-color-scheme` 自动切换。
+- 常量：`LOGIN_PATH` / `LOGOUT_PATH` / `COOKIE_NAME` / `SESSION_TTL_MS`（7 天） / `MAX_BODY_BYTES`（4KB）。
+- 「忘记密码?」用 `<details>` 实现（无需 JS），显示默认账号/密码；`RESET_METHOD_HTML` 常量**按需求先留空**，以后填这里即可。
+- 所有插值都过 `escapeHtml`，`next` 只接受站内路径（防开放重定向）。
 
 ### `lib/https-proxy.js`（HTTPS → HTTP 反代）
 
@@ -148,6 +161,19 @@ reconcile()            ← 启动时由定时器/首次调用触发；设置变�
 ```
 
 要点：**`reconcile()` 是唯一的收敛点**。任何新增的"配置变了要做什么"都必须挂在这里或它的调用链上，不要另起一套 watcher——否则会出现两条路径互相打架。
+
+**每个 HTTPS 请求的流水线**（`startServer` 的 request 回调，顺序固定）：
+
+```
+request
+ ├─ /__https-fix/login   GET → 登录页；POST → 校验(成功 303 + Set-Cookie；失败 401，延时 300ms)
+ ├─ /__https-fix/logout  303 + 清 Cookie
+ ├─ 登录未启用 → 直接转发给 HTTPS 反代
+ ├─ 已登录(hf-auth cookie 验签通过且未过期) → 转发
+ └─ 未登录 → Accept 含 text/html ? 登录页 : 401 JSON
+```
+
+> WebSocket upgrade 同样要求有效会话，否则直接 `socket.destroy()`。登录相关代码全在 `handleAuthRequest()` 一个函数里。
 
 ---
 
@@ -242,7 +268,8 @@ git worktree remove /tmp/wt
 5. **所有副作用挂在 Fiber 上**：定时器、RPC 注册、监听器都用 `ctx.effect()` / `ctx.on()` 返回 disposer，保证停止/更新/卸载时能干净移除。
 6. **响应流不要缓冲**：SSE 必须逐帧下发，别引入中间缓冲层。
 7. **日志双写**：cordis 的 `ctx.logger` 只有内存环形缓冲、**不落盘**，关键诊断必须同时 `console.warn`（`report()` 已封装，注意它是去重的）。
-8. **设置卡片一行一个设置，禁止并排**（用户明确要求）：不要引入两列/自适应并排容器（`hf_grid` 已删除），每个 `Field` 必须是 `Section` 的直接子元素；`React.Fragment` 只用来分组条件渲染，它不产生 DOM 节点。`test/ui-harness.mjs` 对此有专门断言（「设置项一行一个」「自定义路径也一行一个」）。
+9. **登录相关红线**：密码永远不落明文（settings 里只有 SHA-256，明文只存在于登录表单和设置卡片的输入框里）；账号/密码比较一律 `safeEqualHex`（`timingSafeEqual`）；`hf-auth` cookie 必须带 `HttpOnly; Secure; SameSite=Lax`；`/__https-fix/*` 是插件本地路径，**绝不能转发给上游**；新增任何本地路径都要放进 `handleAuthRequest()` 且在登录门之前处理。
+10. **设置卡片一行一个设置，禁止并排**（用户明确要求）：不要引入两列/自适应并排容器（`hf_grid` 已删除），每个 `Field` 必须是 `Section` 的直接子元素；`React.Fragment` 只用来分组条件渲染，它不产生 DOM 节点。`test/ui-harness.mjs` 对此有专门断言（「设置项一行一个」「自定义路径也一行一个」）。
 
 ---
 
@@ -316,7 +343,7 @@ systemd-run --unit=hf-test --collect \
 # 3) 验证后按 PID 精确结束（从 ss -ltnp 取），不要用 pkill -f "dsh web"
 ```
 
-**客户端卡片(设置页 UI)回归测试**(不用起 dsh:jsdom + React 直接渲染卡片,31 项断言,失败退出码非 0):
+**客户端卡片(设置页 UI)回归测试**(不用起 dsh:jsdom + React 直接渲染卡片,47 项断言,失败退出码非 0):
 
 ```bash
 cd <仓库>
@@ -326,14 +353,26 @@ node test/ui-harness.mjs                      # 默认测 ../lib/client.js,也�
 
 **验证清单**（RPC 响应形状有坑，注意 `result.log` / `result.value`，不是 `result.value.log`）：
 
-```bash
+\`\`\`bash
+# 0) 登录默认开启：未登录时 / 会返回登录页(200)，API 返回 401。
+#    先登录换 hf-auth cookie（默认 admin/admin；改过密码就用改后的）：
+curl -sk -c /tmp/jar -o /dev/null -w '%{http_code}\\n' \\
+  -d 'user=admin&password=admin' "https://<域名>:<https端口>/__https-fix/login"   # 期望 303 + Set-Cookie
+
+# 1) dsh 自身的 token 交换（插件自动模式在代理层做,人工核对时可跳过）
 TOKEN=$(grep -o 'token=[A-Za-z0-9_-]*' <日志文件> | tail -1 | cut -d= -f2)
-curl -sk -c /tmp/jar -o /dev/null "https://<域名>:<https端口>/?token=$TOKEN"   # 期望 303 + Set-Cookie，别加 -L
-curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/https-fix/validate" \
-  -H 'content-type: application/json' \
+curl -sk -b /tmp/jar -c /tmp/jar -o /dev/null "https://<域名>:<https端口>/?token=$TOKEN"   # 期望 303
+
+# 2) 插件校验  →  期望 result.log 12 项全 ok:true（含「登录」项）
+curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/https-fix/validate" \\
+  -H 'content-type: application/json' \\
   -d '{"type":"client-request","method":"https-fix/validate","rpcId":"t","payload":{}}'
-# 期望 result.log 11 项全 ok:true
-```
+
+# 3) 退出登录
+curl -sk -b /tmp/jar -o /dev/null "https://<域名>:<https端口>/__https-fix/logout"   # 期望 303 + 清 Cookie
+\`\`\`
+
+> 关掉登录（loginEnabled: false）时第 2 步只有 11 项，且「登录」项会标红——这是刻意的。
 
 settings 命名空间核查（`method` 必须等于 `settings/describe`，否则 400；返回里键名是 `ns`）：
 ```bash
@@ -356,6 +395,8 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 7. **`versionCheck` 是"版本字符串精确相等"**，不是语义化范围。`0.1.5` 与 `0.1.5+build1` 会因归一化而相等，但 `0.1.5` 与 `0.1.5-rc.1` 不等——这是刻意的。
 8. 早期版本号（`0.1.1-rc.x`）与 dsh 版本无对应关系，只存在于历史 commit；当前所有分支已统一为「版本号 = 分支名 = dsh 版本」。
 9. **自动自签证书是自签的**：浏览器第一访问必然报警（这是自签的性质，不是插件故障）。要消除警告只有两条路：把 `$DSH_HOME/https-fix/self-signed.crt` 导入设备信任库，或改填证书路径使用受信任 CA（含 Let's Encrypt 的 IP 证书）。自签证书有效期 10 年、按 hosts 指纹复用，改域名/IP 会自动重签并重启监听（最迟 60 秒内由定时器完成）。
+11. **「忘记密码」里的重置方法先留空**（`lib/login-page.js` 的 `RESET_METHOD_HTML`）；面板只显示默认账号/密码。要补内容改那一个常量即可。维护者手工重置的办法：把 `$DSH_HOME/settings.yaml` 里 `https-fix.loginPasswordHash` 改成 `8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918`（= sha256(admin)）后重启 dsh。
+12. **登录门只挡插件的 HTTPS 端口**：dsh 自己的 http 端口（插件管不到）不受登录保护；要一并收口就打开「关闭 http 外网访问」。另外这是应用层的一道门，不是网络层鉴权。
 10. **测试环境装插件别用裸路径**：`dsh plugin add /path` 会生成 `link:` 依赖，插件按真实路径解析 `@deepseek-ai/schemastery` 就会失败（表现为 boot 报 `Cannot find package '@deepseek-ai/schemastery'`，折腾半天才发现）。用 `dsh plugin add file:/path`（生产就是 `file:` + 硬链接），或直接把插件目录放进 profile 的 `node_modules`。
 
 ---
