@@ -16,7 +16,7 @@
 | 当前适配的 dsh | `0.1.5-rc.2` |
 | 对应分支 | `dsh-0.1.5-rc.2`（= `main`） |
 | 插件版本 | `0.1.5-rc.2` |
-| 代码规模 | `lib/index.js` 814 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/client.js` 512 行；`test/ui-harness.mjs` 167 行（卡片回归测试） |
+| 代码规模 | `lib/index.js` 814 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/client.js` 508 行；`test/ui-harness.mjs` 172 行（卡片回归测试，34 项断言） |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
 | 冻结分支 | `dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
@@ -91,17 +91,18 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 ### `lib/client.js`（浏览器半边）
 
 - 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "settingsScope"]`。
-- 向 `settings.plugin.item` 槽注册**折叠卡片**；`apply()` 在 499 行，卡片主体 `HttpsFixCard` 在 179–496 行。
+- 向 `settings.plugin.item` 槽注册**折叠卡片**；`apply()` 在 494 行，卡片主体 `HttpsFixCard` 在 177–492 行。
 - 卡片结构：
   - 头部：标题 + **实时状态徽标**（挂载 / 校验后 / 保存后调 `/api/https-fix/status`，显示「运行中 域名:端口 · 自签|自有证书」/「HTTPS 未启用」/「设置不可用」）+「未保存」+ 折叠箭头。
-  - 展开后四组 `Section`（114 行）：**HTTPS 服务**（启用 / 域名或 IP +「填入当前地址」/ https 端口 / 监听地址 / 访问入口预览）、**TLS 证书**（`Choice` 单选「自动自签 ↔ 自定义路径」，路径字段只在自定义模式出现）、**访问与安全**（自动模式 / 关闭 http 外网访问 / http 端口 / 核对版本号）、**诊断**（校验、热补丁、结果汇总、热补丁状态）。
+  - 展开后四组 `Section`（112 行）：**HTTPS 服务**（启用 / 域名或 IP +「填入当前地址」/ https 端口 / 监听地址 / 访问入口预览）、**TLS 证书**（`Choice` 单选「自动自签 ↔ 自定义路径」，路径字段只在自定义模式出现）、**访问与安全**（自动模式 / 关闭 http 外网访问 / http 端口 / 核对版本号）、**诊断**（校验、热补丁、结果汇总、热补丁状态）。
   - 页脚：「有 N 项改动未保存」+「放弃修改」+「保存配置」。
-- 视图原语在 106–177 行：`Chevron` / `Section` / `Field` / `Checkbox` / `TextInput` / `NumberInput` / `Choice`；样式全在文件顶部 `cssText`（25 行起，`hf_*` 类名，复用 `--dsw-*` 令牌），**不引入额外 CSS 文件**。
+- 视图原语在 104–175 行：`Chevron` / `Section` / `Field` / `Checkbox` / `TextInput` / `NumberInput` / `Choice`；样式全在文件顶部 `cssText`（25 行起，`hf_*` 类名，复用 `--dsw-*` 令牌），**不引入额外 CSS 文件**。
 - 数据通道：
   - 读 `settingsScope` 快照：`value`（生效值）/ `user`（用户层，用来决定某项能否「恢复默认」）/ `base`（组成层，http 端口占位符）/ `writable` / `status`。
-  - 写：`staged` 暂存（191 行），保存时逐字段 `controller.set`（265 行）；「恢复默认」= `controller.unset(field)`（291 行，老 dsh 没有该方法时按钮自动隐藏）。
-  - RPC 统一走 `rpc()`（221 行）→ `/api/https-fix/<endpoint>`。
-- **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()`（211 行）归一——早期版本没归一，补丁结果显示成「✗ undefined」。
+  - 写：`staged` 暂存（189 行），保存时逐字段 `controller.set`（263 行）；「恢复默认」= `controller.unset(field)`（289 行，老 dsh 没有该方法时按钮自动隐藏）。
+  - RPC 统一走 `rpc()`（219 行）→ `/api/https-fix/<endpoint>`。
+- **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()`（209 行）归一——早期版本没归一，补丁结果显示成「✗ undefined」。
+- **布局不变量**：一行一个设置，禁止任何并排容器（`hf_grid` 已删）；每个 `Field` 必须是 `Section` 的直接子元素（`React.Fragment` 包一层可以，它不产生 DOM 节点）。`test/ui-harness.mjs` 有对应断言。
 - **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）；改完请跑第 8 节的 `test/ui-harness.mjs`。
 
 ### `lib/self-signed.js`（零依赖自签证书）
@@ -239,6 +240,7 @@ git worktree remove /tmp/wt
 5. **所有副作用挂在 Fiber 上**：定时器、RPC 注册、监听器都用 `ctx.effect()` / `ctx.on()` 返回 disposer，保证停止/更新/卸载时能干净移除。
 6. **响应流不要缓冲**：SSE 必须逐帧下发，别引入中间缓冲层。
 7. **日志双写**：cordis 的 `ctx.logger` 只有内存环形缓冲、**不落盘**，关键诊断必须同时 `console.warn`（`report()` 已封装，注意它是去重的）。
+8. **设置卡片一行一个设置，禁止并排**（用户明确要求）：不要引入两列/自适应并排容器（`hf_grid` 已删除），每个 `Field` 必须是 `Section` 的直接子元素；`React.Fragment` 只用来分组条件渲染，它不产生 DOM 节点。`test/ui-harness.mjs` 对此有专门断言（「设置项一行一个」「自定义路径也一行一个」）。
 
 ---
 

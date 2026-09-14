@@ -84,6 +84,10 @@ check("默认折叠(无 body)", $(".hf_body") === null)
 
 await act(async () => { $(".hf_header").click() })
 check("展开后出现四个分组", ["HTTPS 服务", "TLS 证书", "访问与安全", "诊断"].every((t) => $$(".hf_sectionTitle").some((e) => e.textContent === t)), $$(".hf_sectionTitle").map((e) => e.textContent).join(" | "))
+// 布局不变量:一行一个设置,禁止任何自动并排容器
+const fieldsStacked = () => $$(".hf_field").every((f) => f.parentElement && f.parentElement.classList.contains("hf_section"))
+check("设置项一行一个(无并排容器)", $$(".hf_grid").length === 0)
+check("设置项都是分组的直接子元素", fieldsStacked(), $$(".hf_field").map((f) => f.parentElement.className).join(" | ").slice(0, 90))
 check("访问入口预览", text(".hf_url").includes("https://old.example.com:3081/"), text(".hf_url"))
 check("域名输入框回显", $("#" + labelFor("域名 / IP")).value === "old.example.com")
 check("用户改过的项有恢复默认", $$(".hf_inlineBtn").some((b) => b.textContent === "恢复默认"))
@@ -128,6 +132,7 @@ check("恢复默认调用 controller.unset", calls.some((c) => c[0] === "unset" 
 const radios = $$(".hf_choiceRow input[type=radio]")
 await act(async () => { radios[1].click() })
 check("切到自定义证书显示路径输入", $("#" + labelFor("cert 路径")) !== null && $("#" + labelFor("key 路径")) !== null)
+check("自定义路径也一行一个", fieldsStacked() && $$(".hf_grid").length === 0)
 await act(async () => { Simulate.change($("#" + labelFor("cert 路径")), { target: { value: "/etc/ssl/a.pem" } }) })
 check("只填 cert 时提示成对填写", $$(".hf_warn").length === 1, text(".hf_warn"))
 await act(async () => { Simulate.change($("#" + labelFor("key 路径")), { target: { value: "/etc/ssl/a.key" } }) })
