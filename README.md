@@ -81,10 +81,10 @@ dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-<新版本>
 - http 端口（默认取 dsh 当前 http 端口；保存自动改写补丁配置，重启生效）
 - HTTPS 开关（默认关，开启前自动校验、通过后自动启动 HTTPS 服务）
 - HTTPS 端口（默认 3081）
-- 域名、监听地址、TLS 证书/密钥路径
+- 域名 / IP、监听地址、TLS 证书/密钥路径（**路径可留空**：插件自动生成并复用一张自签证书，适合没有域名、只有公网 IP 的场景，见下文「无域名部署」）
 - **自动模式（网页 token）**（默认开；适配 dsh 0.1.2+ 的网页鉴权——自动获取进程 token 并注入，浏览器直接访问 `https://域名:端口` 即可完成 token 换取 cookie；关闭则需自行使用 dsh 启动时打印的带 token URL，等同原始 http 模式）
 - **核对版本号**（默认开；校验当前 dsh 版本与插件目标版本一致，不一致则 HTTPS 校验无法通过、无法开启 HTTPS；关闭需**三次确认**）
-- **一键打热补丁**（自动给 dsh-client-connection 打 `connection.isLoopback` 豁免，让经域名访问的设置页可用；含还原）
+- **一键打热补丁**（自动给 dsh-client-connection 打 `connection.isLoopback` 豁免，让经域名或 IP 访问的设置页可用；含还原）
 - 「校验 HTTPS 可用性」按钮（版本对应 / 受信域名 / 热补丁 / 端口 / 证书配对 / 域名逐项校验并输出日志）
 - 「保存配置」按钮
 
@@ -178,6 +178,22 @@ isLoopback: transport?.ownsHost === true || pageLocation === void 0 || isLoopbac
 若你的浏览器访问端口与插件监听端口一致，也可用带端口的形式 `|| pageLocation.host === "你的域名:端口"`（插件两种都认）。
 
 保存后**刷新页面**即可（客户端 bundle 变更由 dsh HMR 自动热更新，无需重启 dsh）。注意：dsh 升级会覆盖该文件，需重新打补丁。
+
+## 无域名部署（IP + 自签证书）
+
+没有域名、只有公网 IP 时，不需要买域名、也不需要 ACME 证书：
+
+1. 「域名 / IP」填**公网 IP**（例如 `203.0.113.7`）。插件会把它注册进 `trustedHosts`，「一键打热补丁」也按这个 IP 写豁免。
+2. 「TLS 证书路径」「TLS 密钥路径」**都留空**。插件会在 `$DSH_HOME/https-fix/` 自动生成并复用一张自签证书：
+   - SAN 覆盖「配置的 IP + `127.0.0.1` + `localhost`」，有效期 10 年，私钥 0600；
+   - 改 IP/域名会自动重签并重启监听（最迟 60 秒内）；
+   - 证书路径**成对填写才生效**：两个都填 = 用你自己的证书；两个都留空 = 自动自签；只填一个会在校验里报「证书配置」失败且不启动 HTTPS。
+3. 浏览器访问 `https://<IP>:<https端口>`，首次会提示证书不受信任——**自签证书必然如此**，点继续即可。
+4. 想彻底去掉浏览器警告，两条路：
+   - 把 `$DSH_HOME/https-fix/self-signed.crt` 导入设备信任库（这张证书是 `CA:TRUE`，可直接当信任锚）；
+   - 或改填证书路径，使用 Let's Encrypt 等签发的证书（Let's Encrypt 自 2026-01 起支持**直接给公网 IP 签证书**，有效期约 6 天，需要自动化续期）。
+
+> 只暴露 IP 时请自行加访问控制（防火墙 allowlist 等）：dsh 的 Host/Origin 栅栏只防浏览器侧的 DNS rebinding/跨站，不是网络层鉴权。
 
 ## 故障排查
 

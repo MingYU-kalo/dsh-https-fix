@@ -16,7 +16,7 @@
 | 当前适配的 dsh | `0.1.5-rc.2` |
 | 对应分支 | `dsh-0.1.5-rc.2`（= `main`） |
 | 插件版本 | `0.1.5-rc.2` |
-| 代码规模 | `lib/index.js` 689 行、`lib/client.js` 299 行、`lib/https-proxy.js` 212 行 |
+| 代码规模 | `lib/index.js` 814 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/client.js` 299 行 |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
 | 冻结分支 | `dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
@@ -41,9 +41,10 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 | 3 | 浏览器端 `isLoopback` 判定为假 → 设置页显示"在此浏览器不可用" | 对 dsh 的**客户端 bundle 文件**打运行时热补丁，追加一条 `pageLocation.hostname === "<域名>"` 豁免 |
 | 4 | 首次访问要带 token，直接开域名会出现 303 重定向循环 | 插件**在服务端**用进程 token 换出会话 cookie，注入上游并同时下发给浏览器 |
 
-另外两个附加能力：
+另外三个附加能力：
 - **机器级补丁托管**：`blockHttpExternalAccess` 开启时，往 `$DSH_HOME/cordis.patch.yml` 写一条 `webserver` 行覆盖（`host: 127.0.0.1`）；`httpPort` 与实际端口不同时也写 `port`。
 - **版本核查**：`versionCheck` 开启（默认）时，dsh 版本与 `TARGET_DSH_VERSION` 不一致就拒绝启动 HTTPS（见第 6 节）。
+- **无域名自签证书**：`domain` 填 IP、证书路径留空时，插件用纯 Node 生成/复用一张覆盖「该 IP + 回环」的自签证书（`lib/self-signed.js`），不需要 ACME、不需要域名（见第 2、9 节）。
 
 ---
 
@@ -53,45 +54,56 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 
 | 行号 | 符号 | 职责 |
 |---|---|---|
-| 33 / 36 | `name` / `inject` | `inject = ["webServer", "clientModules", "connection"]` |
-| 39 | `NS` | settings 命名空间 `https-fix` |
-| 45–56 | `Config` | zod schema，同时也是 settings 命名空间 schema（10 个字段） |
-| 59 | `TARGET_DSH_VERSION` | **适配新 dsh 版本时要改的第一处** |
-| 65–68 | `LOOPBACK_TARGET_LINES` | 客户端 bundle 里 `isLoopback` 行的候选字面量（**第二处**） |
-| 74 | `exemptionPattern()` | 匹配已写入的豁免片段，新老形式都认 |
-| 79 / 85 | `normalizeVersion()` / `runningDshVersion()` | 去掉 `v` 前缀与 `+build`，再与目标版本精确比对 |
-| 95 / 99 | `dshHome()` / `patchFilePath()` | `$DSH_HOME`（默认 `~/.dsh`）与机器级补丁路径 |
-| 103 | `apply(ctx, config)` | 全部逻辑的入口 |
-| 118 | `safeSource()` | 读 settings 生效值，失败回退到组成配置 |
-| 133 | `report(label, err)` | 异常收敛：写 `ctx.logger` + 去重 `console.warn` |
-| 151 | `guard(label, fn)` | **异步/同步异常统一兜底，见第 6 节红线** |
-| 168 | `currentToken()` | 取进程 token（`connection.authenticatedUrl`，5 秒缓存） |
-| 184 / 192 | `stopServer()` / `startServer()` | HTTPS 服务生命周期；`startServer` 里把 5 类回调异常全部就地收敛 |
-| 253 | `wantHttps(cfg)` | `enableHttps && domain && certPath && keyPath` |
-| 262 | `versionCheckResult(cfg)` | 版本核查，返回 `{ok, msg, block}` |
-| 271 | `reconcile()` | **配置变更的统一收敛点**（见第 3 节） |
-| 295 / 306 | `readPatchEntries()` / `writePatchOverride()` | 机器级补丁层读写 |
-| 330 | `ctx.inject(["settings"], …)` | 注册 settings 命名空间（`settings.installSection`） |
-| 339–360 | 证书热重载定时器 | 60 秒 `stat` 证书文件，mtime/size 变了就重启监听；`unref()` 不阻止进程退出 |
-| 364 | dispose | 卸载时关闭 HTTPS 监听 |
-| 371–377 | `RPC_ROUTES` | 5 个端点 → endpoint 名 |
-| 383 / 412 | `rpcResponse()` / 注册循环 | `connection.fetch.register({path, methods:["POST"], requestBody:"buffered"})` |
-| 421 | `statusView()` | `status` 端点的返回体 |
-| 441 | `loopbackBundlePath()` | 用 `clientModules.clientPath("@deepseek-ai/dsh-client-connection")` 定位 bundle |
-| 458 / 465 / 481 | `loopbackExemption()` / `exemptionPresent()` / `loopbackPatchTarget()` | 热补丁的生成、查重、定位 |
-| 489 / 505 / 519 | `patchLoopback()` / `revertLoopback()` / `patchStatus()` | 打补丁 / 还原 / 查状态 |
-| 540 / 562 | `ensureTrustedHost()` / `trustedHostCheck()` | 运行时注册域名 + 校验用检查 |
-| 579 | `runValidation(cfg)` | 11 项校验的编排 |
-| 599 | `hotPatchCheck()` | 校验里附带的热补丁状态项 |
-| 614 / 629 / 667 / 677 | `checkPort` / `checkTls` / `checkDomain` / `checkHttpUp` | 四个子检查 |
+| 34 / 37 | `name` / `inject` | `inject = ["webServer", "clientModules", "connection"]` |
+| 40 | `NS` | settings 命名空间 `https-fix` |
+| 46–57 | `Config` | zod schema，同时也是 settings 命名空间 schema（10 个字段） |
+| 60 | `TARGET_DSH_VERSION` | **适配新 dsh 版本时要改的第一处** |
+| 66–69 | `LOOPBACK_TARGET_LINES` | 客户端 bundle 里 `isLoopback` 行的候选字面量（**第二处**） |
+| 75 | `exemptionPattern()` | 匹配已写入的豁免片段，新老形式都认 |
+| 80 / 86 | `normalizeVersion()` / `runningDshVersion()` | 去掉 `v` 前缀与 `+build`，再与目标版本精确比对 |
+| 96 / 100 | `dshHome()` / `patchFilePath()` | `$DSH_HOME`（默认 `~/.dsh`）与机器级补丁路径 |
+| 105 | `certDir()` | 自签证书目录 `$DSH_HOME/https-fix/` |
+| 115 / 124 / 133 / 138 | `certificateMode()` / `certificateHosts()` / `autoCertificate()` / `loadCertificate()` | 证书来源判定（`paths` / `auto` / `invalid`）、自签要覆盖的名字、生成或复用自签、装配监听用的证书材料 |
+| 159 | `apply(ctx, config)` | 全部逻辑的入口 |
+| 176 | `safeSource()` | 读 settings 生效值，失败回退到组成配置 |
+| 191 | `report(label, err)` | 异常收敛：写 `ctx.logger` + 去重 `console.warn` |
+| 209 | `guard(label, fn)` | **异步/同步异常统一兜底，见第 6 节红线** |
+| 226 | `currentToken()` | 取进程 token（`connection.authenticatedUrl`，5 秒缓存） |
+| 242 / 250 | `stopServer()` / `startServer()` | HTTPS 服务生命周期；`startServer` 里把 5 类回调异常全部就地收敛，并记录 `activeCert` / `startedSignature` |
+| 318 / 324 | `wantHttps(cfg)` / `serverSignature(cfg)` | 是否该起 HTTPS（证书路径"成对填或都留空"）；影响监听的配置签名 |
+| 338 | `versionCheckResult(cfg)` | 版本核查，返回 `{ok, msg, block}` |
+| 347 | `reconcile()` | **配置变更的统一收敛点**（见第 3 节）；签名变了先停再起 |
+| 373 / 384 | `readPatchEntries()` / `writePatchOverride()` | 机器级补丁层读写 |
+| 409 | `ctx.inject(["settings"], …)` | 注册 settings 命名空间（`settings.installSection`） |
+| 417–438 | 证书热重载定时器 | 60 秒一轮：文件证书按 mtime/size；自签证书按内容变化（hosts 变了或临近过期会重签）；`unref()` 不阻止进程退出 |
+| 456 | dispose | 卸载时关闭 HTTPS 监听 |
+| 463–469 | `RPC_ROUTES` | 5 个端点 → endpoint 名 |
+| 475 / 505 | `rpcResponse()` / 注册循环 | `connection.fetch.register({path, methods:["POST"], requestBody:"buffered"})` |
+| 513 | `statusView()` | `status` 端点的返回体（含 `certSource` / `certPath`） |
+| 535 | `loopbackBundlePath()` | 用 `clientModules.clientPath("@deepseek-ai/dsh-client-connection")` 定位 bundle |
+| 552 / 559 / 575 | `loopbackExemption()` / `exemptionPresent()` / `loopbackPatchTarget()` | 热补丁的生成、查重、定位（域名或 IP 都可以） |
+| 583 / 599 / 613 | `patchLoopback()` / `revertLoopback()` / `patchStatus()` | 打补丁 / 还原 / 查状态 |
+| 634 / 656 | `ensureTrustedHost()` / `trustedHostCheck()` | 运行时注册域名/IP + 校验用检查 |
+| 673 | `runValidation(cfg)` | 11 项校验的编排 |
+| 693 | `hotPatchCheck()` | 校验里附带的热补丁状态项 |
+| 708 / 728 / 792 / 802 | `checkPort` / `checkTls` / `checkDomain` / `checkHttpUp` | 四个子检查；`checkTls` 同时支持路径证书与自动自签，名字匹配交给 `X509Certificate.checkHost/checkIP` |
 
 ### `lib/client.js`（浏览器半边）
 
 - 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "settingsScope"]`。
 - 向 `settings.plugin.item` 槽注册**折叠卡片**（`ctx.slots.inject` + `ctx.slots.register`，第 287 行）。
-- 字段 UI 在第 233–266 行，顺序：关闭 http 外网访问 / http 端口 / 启用 https / https 端口 / 域名 / 监听地址 / cert 路径 / key 路径 / 自动模式 / 核对版本号 / 客户端热补丁区块。
+- 字段 UI 在第 233–266 行，顺序：关闭 http 外网访问 / http 端口 / 启用 https / https 端口 / 域名或 IP / 监听地址 / cert 路径（可留空） / key 路径（可留空） / 自动模式 / 核对版本号 / 客户端热补丁区块。
 - 数据通道：读走 `settingsScope`，写走 `settings.update`；「校验」按钮 `fetch("/api/https-fix/validate")`（第 130 行），热补丁按钮 `fetch("/api/https-fix/" + endpoint)`（第 176 行）。
 - **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）。
+
+### `lib/self-signed.js`（零依赖自签证书）
+
+- 纯 Node（`node:crypto` + 手写 DER），不依赖 openssl、不新增 npm 依赖；host 侧唯一新增运行时文件。
+- `ipToBytes(ip)`（118 行）：IPv4/IPv6 → 字节，支持 `::` 缩写、IPv4-mapped 尾缀与 `%zone`。
+- `createSelfSignedCertificate({hosts, days})`（177 行）：RSA-2048 + SHA-256，X.509 v3，`basicConstraints CA:TRUE`（可直接导入设备信任库当锚）、`keyUsage`、`extendedKeyUsage serverAuth`、`subjectAltName`。
+  - **改这里最容易踩坑**：SAN 里 dNSName 必须是 `[2]`（tag `0x82`）、iPAddress 是 `[7]`（tag `0x87`）。写成普通 IA5String（`0x16`）时 OpenSSL 不会报错，而是**整段 SAN 当不存在**——`checkIP` 恒失败、浏览器域名校验失败，只有 `openssl x509 -text` 才看得出来。
+- `ensureSelfSignedCertificate({dir, hosts, days, renewDays})`（237 行）：按 `self-signed.json` 里的 hosts 指纹复用；hosts 变了或剩余有效期 < `renewDays`（默认 30 天）就重签。证书 0644、私钥 0600、目录 0700，写入一律"临时文件 + rename"，避免读者看到半截文件。
+- 落盘位置 `$DSH_HOME/https-fix/`；SAN 固定包含「配置的域名/IP + `127.0.0.1` + `localhost`」。
 
 ### `lib/https-proxy.js`（HTTPS → HTTP 反代）
 
@@ -116,11 +128,12 @@ apply()
  └─ for RPC_ROUTES: ctx.effect → connection.fetch.register(...)
 
 reconcile()            ← 启动时由定时器/首次调用触发；设置变更时由 onChange 触发
- ├─ ensureTrustedHost(cfg)      把域名 push 进 connection.trustedHosts
+ ├─ ensureTrustedHost(cfg)      把配置的域名/IP push 进 connection.trustedHosts
  ├─ writePatchOverride(cfg)     机器级补丁层（不需要时删除该文件）
- ├─ !wantHttps → stopServer() 并返回
+ ├─ !wantHttps → stopServer() 并返回（域名空、或证书路径只填一个，都视为不可用）
  ├─ versionCheckResult(cfg).block → 停止 HTTPS 并 warn
- └─ httpsServer === null → startServer(cfg)
+ └─ 配置签名变化或未监听 → stopServer()（已在听时）+ startServer(cfg)
+     签名 = certificateMode|domain|httpsPort|address|httpPort；改域名/端口/证书来源都会立即重启监听
 ```
 
 要点：**`reconcile()` 是唯一的收敛点**。任何新增的"配置变了要做什么"都必须挂在这里或它的调用链上，不要另起一套 watcher——否则会出现两条路径互相打架。
@@ -322,6 +335,8 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 6. **`autoToken` 的会话 cookie 按 Host 缓存 12 小时**。换域名或端口后旧缓存不会复用（cache key 是 authority），但同一 Host 内 token 轮换要等 TTL 过期。
 7. **`versionCheck` 是"版本字符串精确相等"**，不是语义化范围。`0.1.5` 与 `0.1.5+build1` 会因归一化而相等，但 `0.1.5` 与 `0.1.5-rc.1` 不等——这是刻意的。
 8. 早期版本号（`0.1.1-rc.x`）与 dsh 版本无对应关系，只存在于历史 commit；当前所有分支已统一为「版本号 = 分支名 = dsh 版本」。
+9. **自动自签证书是自签的**：浏览器第一访问必然报警（这是自签的性质，不是插件故障）。要消除警告只有两条路：把 `$DSH_HOME/https-fix/self-signed.crt` 导入设备信任库，或改填证书路径使用受信任 CA（含 Let's Encrypt 的 IP 证书）。自签证书有效期 10 年、按 hosts 指纹复用，改域名/IP 会自动重签并重启监听（最迟 60 秒内由定时器完成）。
+10. **测试环境装插件别用裸路径**：`dsh plugin add /path` 会生成 `link:` 依赖，插件按真实路径解析 `@deepseek-ai/schemastery` 就会失败（表现为 boot 报 `Cannot find package '@deepseek-ai/schemastery'`，折腾半天才发现）。用 `dsh plugin add file:/path`（生产就是 `file:` + 硬链接），或直接把插件目录放进 profile 的 `node_modules`。
 
 ---
 
