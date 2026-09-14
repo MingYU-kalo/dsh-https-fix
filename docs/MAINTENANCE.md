@@ -16,7 +16,7 @@
 | 当前适配的 dsh | `0.1.5-rc.2` |
 | 对应分支 | `dsh-0.1.5-rc.2`（= `main`） |
 | 插件版本 | `0.1.5-rc.2` |
-| 代码规模 | `lib/index.js` 814 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/client.js` 508 行；`test/ui-harness.mjs` 172 行（卡片回归测试，34 项断言） |
+| 代码规模 | `lib/index.js` 847 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/client.js` 538 行；`test/ui-harness.mjs` 195 行（卡片回归测试，38 项断言） |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
 | 冻结分支 | `dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
@@ -62,46 +62,48 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 | 75 | `exemptionPattern()` | 匹配已写入的豁免片段，新老形式都认 |
 | 80 / 86 | `normalizeVersion()` / `runningDshVersion()` | 去掉 `v` 前缀与 `+build`，再与目标版本精确比对 |
 | 96 / 100 | `dshHome()` / `patchFilePath()` | `$DSH_HOME`（默认 `~/.dsh`）与机器级补丁路径 |
-| 105 | `certDir()` | 自签证书目录 `$DSH_HOME/https-fix/` |
-| 115 / 124 / 133 / 138 | `certificateMode()` / `certificateHosts()` / `autoCertificate()` / `loadCertificate()` | 证书来源判定（`paths` / `auto` / `invalid`）、自签要覆盖的名字、生成或复用自签、装配监听用的证书材料 |
-| 159 | `apply(ctx, config)` | 全部逻辑的入口 |
-| 176 | `safeSource()` | 读 settings 生效值，失败回退到组成配置 |
-| 191 | `report(label, err)` | 异常收敛：写 `ctx.logger` + 去重 `console.warn` |
-| 209 | `guard(label, fn)` | **异步/同步异常统一兜底，见第 6 节红线** |
-| 226 | `currentToken()` | 取进程 token（`connection.authenticatedUrl`，5 秒缓存） |
-| 242 / 250 | `stopServer()` / `startServer()` | HTTPS 服务生命周期；`startServer` 里把 5 类回调异常全部就地收敛，并记录 `activeCert` / `startedSignature` |
-| 318 / 324 | `wantHttps(cfg)` / `serverSignature(cfg)` | 是否该起 HTTPS（证书路径"成对填或都留空"）；影响监听的配置签名 |
-| 338 | `versionCheckResult(cfg)` | 版本核查，返回 `{ok, msg, block}` |
-| 347 | `reconcile()` | **配置变更的统一收敛点**（见第 3 节）；签名变了先停再起 |
-| 373 / 384 | `readPatchEntries()` / `writePatchOverride()` | 机器级补丁层读写 |
-| 409 | `ctx.inject(["settings"], …)` | 注册 settings 命名空间（`settings.installSection`） |
-| 417–438 | 证书热重载定时器 | 60 秒一轮：文件证书按 mtime/size；自签证书按内容变化（hosts 变了或临近过期会重签）；`unref()` 不阻止进程退出 |
-| 456 | dispose | 卸载时关闭 HTTPS 监听 |
-| 463–469 | `RPC_ROUTES` | 5 个端点 → endpoint 名 |
-| 475 / 505 | `rpcResponse()` / 注册循环 | `connection.fetch.register({path, methods:["POST"], requestBody:"buffered"})` |
-| 513 | `statusView()` | `status` 端点的返回体（含 `certSource` / `certPath`） |
-| 535 | `loopbackBundlePath()` | 用 `clientModules.clientPath("@deepseek-ai/dsh-client-connection")` 定位 bundle |
-| 552 / 559 / 575 | `loopbackExemption()` / `exemptionPresent()` / `loopbackPatchTarget()` | 热补丁的生成、查重、定位（域名或 IP 都可以） |
-| 583 / 599 / 613 | `patchLoopback()` / `revertLoopback()` / `patchStatus()` | 打补丁 / 还原 / 查状态 |
-| 634 / 656 | `ensureTrustedHost()` / `trustedHostCheck()` | 运行时注册域名/IP + 校验用检查 |
-| 673 | `runValidation(cfg)` | 11 项校验的编排 |
-| 693 | `hotPatchCheck()` | 校验里附带的热补丁状态项 |
-| 708 / 728 / 792 / 802 | `checkPort` / `checkTls` / `checkDomain` / `checkHttpUp` | 四个子检查；`checkTls` 同时支持路径证书与自动自签，名字匹配交给 `X509Certificate.checkHost/checkIP` |
+| 105 / 119 | `isPrivateIPv4()` / `serverIPv4Addresses()` | 「填入服务器 IP」的数据源：直接枚举网卡（IPv4、非 internal），带 `{iface, address, private}`、公网优先排序；**只收 IPv4**（IPv6 方括号语义在 Host/trustedHosts/SAN 三处不一致） |
+| 137 | `certDir()` | 自签证书目录 `$DSH_HOME/https-fix/` |
+| 147 / 156 / 165 / 170 | `certificateMode()` / `certificateHosts()` / `autoCertificate()` / `loadCertificate()` | 证书来源判定（`paths` / `auto` / `invalid`）、自签要覆盖的名字、生成或复用自签、装配监听用的证书材料 |
+| 191 | `apply(ctx, config)` | 全部逻辑的入口 |
+| 208 | `safeSource()` | 读 settings 生效值，失败回退到组成配置 |
+| 223 | `report(label, err)` | 异常收敛：写 `ctx.logger` + 去重 `console.warn` |
+| 241 | `guard(label, fn)` | **异步/同步异常统一兜底，见第 6 节红线** |
+| 258 | `currentToken()` | 取进程 token（`connection.authenticatedUrl`，5 秒缓存） |
+| 274 / 282 | `stopServer()` / `startServer()` | HTTPS 服务生命周期；`startServer` 里把 5 类回调异常全部就地收敛，并记录 `activeCert` / `startedSignature` |
+| 350 / 356 | `wantHttps(cfg)` / `serverSignature(cfg)` | 是否该起 HTTPS（证书路径"成对填或都留空"）；影响监听的配置签名 |
+| 370 | `versionCheckResult(cfg)` | 版本核查，返回 `{ok, msg, block}` |
+| 379 | `reconcile()` | **配置变更的统一收敛点**（见第 3 节）；签名变了先停再起 |
+| 405 / 416 | `readPatchEntries()` / `writePatchOverride()` | 机器级补丁层读写 |
+| 441 | `ctx.inject(["settings"], …)` | 注册 settings 命名空间（`settings.installSection`） |
+| 449–470 | 证书热重载定时器 | 60 秒一轮：文件证书按 mtime/size；自签证书按内容变化（hosts 变了或临近过期会重签）；`unref()` 不阻止进程退出 |
+| 488 | dispose | 卸载时关闭 HTTPS 监听 |
+| 495–501 | `RPC_ROUTES` | 5 个端点 → endpoint 名 |
+| 507 / 537 | `rpcResponse()` / 注册循环 | `connection.fetch.register({path, methods:["POST"], requestBody:"buffered"})` |
+| 545 | `statusView()` | `status` 端点的返回体（含 `certSource` / `certPath` / `serverIps`） |
+| 568 | `loopbackBundlePath()` | 用 `clientModules.clientPath("@deepseek-ai/dsh-client-connection")` 定位 bundle |
+| 585 / 592 / 608 | `loopbackExemption()` / `exemptionPresent()` / `loopbackPatchTarget()` | 热补丁的生成、查重、定位（域名或 IP 都可以） |
+| 616 / 632 / 646 | `patchLoopback()` / `revertLoopback()` / `patchStatus()` | 打补丁 / 还原 / 查状态 |
+| 667 / 689 | `ensureTrustedHost()` / `trustedHostCheck()` | 运行时注册域名/IP + 校验用检查 |
+| 706 | `runValidation(cfg)` | 11 项校验的编排 |
+| 726 | `hotPatchCheck()` | 校验里附带的热补丁状态项 |
+| 741 / 761 / 825 / 835 | `checkPort` / `checkTls` / `checkDomain` / `checkHttpUp` | 四个子检查；`checkTls` 同时支持路径证书与自动自签，名字匹配交给 `X509Certificate.checkHost/checkIP` |
 
 ### `lib/client.js`（浏览器半边）
 
 - 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "settingsScope"]`。
-- 向 `settings.plugin.item` 槽注册**折叠卡片**；`apply()` 在 494 行，卡片主体 `HttpsFixCard` 在 177–492 行。
+- 向 `settings.plugin.item` 槽注册**折叠卡片**；`apply()` 在 524 行，卡片主体 `HttpsFixCard` 在 177–522 行。
 - 卡片结构：
   - 头部：标题 + **实时状态徽标**（挂载 / 校验后 / 保存后调 `/api/https-fix/status`，显示「运行中 域名:端口 · 自签|自有证书」/「HTTPS 未启用」/「设置不可用」）+「未保存」+ 折叠箭头。
-  - 展开后四组 `Section`（112 行）：**HTTPS 服务**（启用 / 域名或 IP +「填入当前地址」/ https 端口 / 监听地址 / 访问入口预览）、**TLS 证书**（`Choice` 单选「自动自签 ↔ 自定义路径」，路径字段只在自定义模式出现）、**访问与安全**（自动模式 / 关闭 http 外网访问 / http 端口 / 核对版本号）、**诊断**（校验、热补丁、结果汇总、热补丁状态）。
+  - 展开后四组 `Section`（112 行）：**HTTPS 服务**（启用 / 域名或 IP +「填入当前地址」+「填入服务器 IP」/ https 端口 / 监听地址 / 访问入口预览）、**TLS 证书**（`Choice` 单选「自动自签 ↔ 自定义路径」，路径字段只在自定义模式出现）、**访问与安全**（自动模式 / 关闭 http 外网访问 / http 端口 / 核对版本号）、**诊断**（校验、热补丁、结果汇总、热补丁状态）。
   - 页脚：「有 N 项改动未保存」+「放弃修改」+「保存配置」。
 - 视图原语在 104–175 行：`Chevron` / `Section` / `Field` / `Checkbox` / `TextInput` / `NumberInput` / `Choice`；样式全在文件顶部 `cssText`（25 行起，`hf_*` 类名，复用 `--dsw-*` 令牌），**不引入额外 CSS 文件**。
 - 数据通道：
   - 读 `settingsScope` 快照：`value`（生效值）/ `user`（用户层，用来决定某项能否「恢复默认」）/ `base`（组成层，http 端口占位符）/ `writable` / `status`。
-  - 写：`staged` 暂存（189 行），保存时逐字段 `controller.set`（263 行）；「恢复默认」= `controller.unset(field)`（289 行，老 dsh 没有该方法时按钮自动隐藏）。
-  - RPC 统一走 `rpc()`（219 行）→ `/api/https-fix/<endpoint>`。
-- **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()`（209 行）归一——早期版本没归一，补丁结果显示成「✗ undefined」。
+  - **两个「填入」按钮**：「填入当前地址」= `window.location.hostname`（浏览器地址栏，不含端口，IPv6 保持方括号原样）；「填入服务器 IP」= host 侧 `serverIPv4Addresses()` 经 `status.serverIps` 下发的 `{iface,address,private}[]`，唯一候选直接填、多个候选展开一行带网卡名的按钮（公网优先），无候选时按钮禁用。
+  - 写：`staged` 暂存（189 行），保存时逐字段 `controller.set`（264 行）；「恢复默认」= `controller.unset(field)`（292 行，老 dsh 没有该方法时按钮自动隐藏）。
+  - RPC 统一走 `rpc()`（220 行）→ `/api/https-fix/<endpoint>`。
+- **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()`（210 行）归一——早期版本没归一，补丁结果显示成「✗ undefined」。
 - **布局不变量**：一行一个设置，禁止任何并排容器（`hf_grid` 已删）；每个 `Field` 必须是 `Section` 的直接子元素（`React.Fragment` 包一层可以，它不产生 DOM 节点）。`test/ui-harness.mjs` 有对应断言。
 - **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）；改完请跑第 8 节的 `test/ui-harness.mjs`。
 

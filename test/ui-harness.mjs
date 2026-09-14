@@ -44,10 +44,11 @@ const controller = {
   unset: async (k) => { calls.push(["unset", k]); const u = { ...snapshot.user }; delete u[k]; snapshot = { ...snapshot, user: u }; listeners.forEach((l) => l()) }
 }
 
+let statusValue = { running: true, httpsPort: 3081, domain: "old.example.com", certSource: "auto-self-signed", certPath: "/root/.dsh/https-fix/self-signed.crt", enableHttps: true, serverIps: ["10.0.0.5", "172.17.0.1"] }
 global.fetch = async (url, init) => {
   JSON.parse(init.body)
   let result
-  if (url.endsWith("/status")) result = { ok: true, value: { running: true, httpsPort: 3081, domain: "old.example.com", certSource: "auto-self-signed", certPath: "/root/.dsh/https-fix/self-signed.crt", enableHttps: true } }
+  if (url.endsWith("/status")) result = { ok: true, value: statusValue }
   else if (url.endsWith("/patch-status")) result = { ok: true, patched: false, msg: "未打热补丁" }
   else if (url.endsWith("/validate")) result = { ok: false, log: [{ ok: true, msg: "版本核对:dsh 0.1.5-rc.2 一致" }, { ok: false, msg: "热补丁:未应用" }] }
   else if (url.endsWith("/patch-loopback")) result = { ok: true, log: ["已写入热补丁"] }
@@ -154,6 +155,28 @@ await act(async () => { Simulate.change($("#" + labelFor("域名 / IP")), { targ
 check("改动后可放弃", byText("button", "放弃修改").disabled === false)
 await act(async () => { byText("button", "放弃修改").click() })
 check("放弃后未保存徽标消失", $(".hf_pending") === null)
+
+// 服务器 IP 来源(host 侧网卡枚举,经 status RPC 下发)
+const domainBox = () => $("#" + labelFor("域名 / IP"))
+const refreshStatusViaValidate = async () => {
+  await act(async () => { byText("button", "校验 HTTPS 可用性").click() })
+  await flush()
+}
+statusValue = { ...statusValue, serverIps: [{ iface: "ens18", address: "10.0.0.5", private: false }] }
+await refreshStatusViaValidate()
+await act(async () => { byText("button", "填入服务器 IP").click() })
+check("单个服务器 IP 直接填入", domainBox().value === "10.0.0.5", domainBox().value)
+
+statusValue = { ...statusValue, serverIps: [{ iface: "ens18", address: "10.0.0.5", private: false }, { iface: "docker0", address: "172.17.0.1", private: true }] }
+await refreshStatusViaValidate()
+await act(async () => { byText("button", "填入服务器 IP").click() })
+check("多个服务器 IP 展开候选行(带网卡名)", $$("span").some((s) => s.textContent === "服务器网卡地址(公网优先):") && $$("button").some((b) => b.textContent === "docker0 · 172.17.0.1"), $$(".hf_row button").map((b) => b.textContent).join(" | "))
+await act(async () => { $$("button").find((b) => b.textContent.includes("172.17.0.1")).click() })
+check("选候选后填入并收起候选行", domainBox().value === "172.17.0.1" && !$$("span").some((s) => s.textContent === "服务器网卡地址(公网优先):"), domainBox().value)
+
+statusValue = { ...statusValue, serverIps: [] }
+await refreshStatusViaValidate()
+check("无服务器 IP 时按钮禁用", byText("button", "填入服务器 IP").disabled === true)
 
 // 只读
 snapshot = { ...snapshot, writable: false }
