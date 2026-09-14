@@ -95,4 +95,4 @@
 
 ## 许可
 
-MIT
+[MIT](LICENSE) © 2026 MingYU-kalo
