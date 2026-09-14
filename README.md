@@ -12,6 +12,17 @@
 2. **装错版本 = dsh 直接起不来**（不是"功能不可用"）。插件版本必须与 dsh 版本**严格一致**：`dsh --version` 的输出 = 要装的分支名 = 插件 `version`。升 dsh 之前，先把插件切到对应分支，或者先禁用插件。
 3. **它把 dsh 暴露到公网。** dsh 里的 agent 能在你机器上执行命令；请务必改掉默认密码、配好防火墙白名单。默认账密是 `admin` / `admin`，登录页的「忘记密码?」里有重置办法。
 
+> ## 🔴 dsh 更新时必须同时处理这个插件
+>
+> **dsh 一升级，旧插件会让 dsh 完全起不来。** 所以升级 dsh 前**二选一，不能跳过**：
+>
+> 1. **先把插件关掉**：`dsh plugin --profile web remove dsh-https-fix`，或者在 `$DSH_HOME/profiles/web/cordis.patch.yml` 里给 `https-fix` 那一行加上 `disabled: true`；
+> 2. **或者让 agent 一并更新**：把下面这句话交给你的 agent ——
+>
+>    > “我要把 dsh 从 <旧版本> 升到 <新版本>。请按 `AGENTS.md` 的升级顺序，先把 dsh-https-fix 切到 `dsh-<新版本>` 分支（上游没有该分支就先禁用插件），再升级 dsh；重启后跑完 12 项校验、重打热补丁，最后把结果报给我。”
+>
+> **顺序永远是：先处理插件，再升级 dsh。** 反过来就是 dsh 起不来的事故（`plugin(s) failed to load`）。
+
 ---
 
 ## 安装（可以直接把下面这段丢给 agent 让它干）

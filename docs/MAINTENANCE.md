@@ -417,6 +417,7 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `e0b558b` feat: adapt to dsh 0.1.5-rc.1 | 版本号规则改为「插件版本 = 分支名 = dsh 版本」；修正客户端校验路径为 `/api/https-fix/validate`（旧路径 405）；热补丁豁免改为按 **hostname** 匹配（端口无关，兼容前置 nginx） |
 | `6f2f2d0` feat: adapt to dsh 0.1.5-rc.2 | 逐项比对 7 个依赖点，**全部未变**，仅版本常量与元数据跟随到 rc.2；同时把 `docs/MAINTENANCE.md` 维护交接文档纳入仓库 |
 | `a613917` refactor(client): 设置卡片重构 | 头部实时状态徽标；四组分区（HTTPS 服务/TLS 证书/访问与安全/诊断）；证书来源显式单选；「填入当前地址」；每项「恢复默认」(`controller.unset`)；校验 N/M 汇总 +「放弃修改」；修复热补丁结果渲染成「✗ undefined」（`asLogLines` 归一字符串数组）；新增 `test/ui-harness.mjs`（31 项断言） |
+| `PENDING_DOC` docs: dsh 升级警告 | README 顶部加 🔴「dsh 更新时必须同时处理这个插件」（二选一：先关掉插件 / 或让 agent 按 AGENTS.md 一并更新，并给出可直接复制的话术）；AGENTS.md 新增 §2.0「dsh 升级时的顺序」（先查上游有没有 `dsh-<新版本>` 分支 → 有就切分支、没有就先禁用 → 升完跑 12 项校验并重打热补丁） |
 | `27ec333` docs: AGENTS.md + README 重写 + 忘记密码说明 | 新增 `AGENTS.md`（给 agent 的安装手册：红线「禁止让 dsh 给自己装/重启本插件」+ 安装前必问的四个问题 + 装完验证 + 重置账密步骤）；`README.md` 重写为「直说重点」（一句话定位 / 高危三条 / 作者节奏 / 可直接丢给 agent 的安装话术 / 版本表 / 自救）；登录页「忘记密码」填入两条重置路径，与 AGENTS.md 对齐 |
 | `d8903f6` feat(auth): 登录门 | 新增 `lib/auth.js`（SHA-256 口令 + HMAC 会话令牌 + timingSafeEqual）与 `lib/login-page.js`（仿 dsh 配色的单文件登录页）；`handleAuthRequest()` 在代理前拦截；默认 `admin`/`admin`，密码只存哈希；校验增至 12 项；harness 增至 47 项断言 |
 | `9df312b` feat(client): 「填入服务器 IP」 | host 侧 `serverIPv4Addresses()` 直接枚举网卡（非回环 IPv4，带 `{iface,address,private}`、公网优先），经 `status.serverIps` 下发；卡片第二个一键按钮：唯一候选直填、多候选展开带网卡名的按钮；IPv6 按要求保持方括号原样不归一 |

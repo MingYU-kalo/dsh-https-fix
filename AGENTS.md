@@ -73,6 +73,20 @@
 
 ## 2. 安装步骤
 
+### 2.0 dsh 升级时的顺序（人类要升级 dsh 时先看这里）
+
+**铁律：先处理插件，再升级 dsh。** 带着旧版本插件启动新版本 dsh = dsh 直接起不来。
+
+1. 先看上游有没有对应分支：
+
+       git ls-remote --heads https://github.com/MingYU-kalo/dsh-https-fix.git | grep 'dsh-<新版本>'
+
+2. 分两种情况：
+   - **有该分支** → 先把插件切过去（`dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-<新版本>`），再升级 dsh；
+   - **没有该分支** → **先禁用插件**（`dsh plugin --profile web remove dsh-https-fix`，或在 profile 的 `cordis.patch.yml` 里写 `disabled: true`），再升级 dsh。等作者适配出分支后再装回来。
+3. 升级完成后：按第 3 节跑一遍 12 项校验，并**重打一次热补丁**（dsh 升级会覆盖它的客户端 bundle）。
+4. 全程遵守上面的红线：要重启的 dsh 如果就是你所在的实例，**交给人类执行**。
+
 ### 2.1 先对版本（错版本会让 dsh 起不来）
 
     dsh --version        # 例如 0.1.5-rc.2
