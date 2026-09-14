@@ -16,7 +16,8 @@
 | 当前适配的 dsh | `0.1.5-rc.2` |
 | 对应分支 | `dsh-0.1.5-rc.2`（= `main`） |
 | 插件版本 | `0.1.5-rc.2` |
-| 代码规模 | `lib/index.js` 1033 行、`lib/client.js` 606 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/auth.js` 111 行、`lib/login-page.js` 97 行；`test/ui-harness.mjs` 216 行（卡片回归测试，47 项断言） |
+| 代码规模 | `lib/index.js` 1033 行、`lib/client.js` 606 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/auth.js` 111 行、`lib/login-page.js` 106 行；`test/ui-harness.mjs` 216 行（卡片回归测试，47 项断言） |
+| 面向外部的文档 | `README.md`（面向用户，87 行：高危警告 + 安装 + 版本表 + 自救）、`AGENTS.md`（**给 agent 的安装手册**，194 行：红线 + 四个必问问题 + 安装/验证/重置账密步骤）——两份都与本文件的内部细节互补 |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
 | 冻结分支 | `dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
@@ -395,7 +396,7 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 7. **`versionCheck` 是"版本字符串精确相等"**，不是语义化范围。`0.1.5` 与 `0.1.5+build1` 会因归一化而相等，但 `0.1.5` 与 `0.1.5-rc.1` 不等——这是刻意的。
 8. 早期版本号（`0.1.1-rc.x`）与 dsh 版本无对应关系，只存在于历史 commit；当前所有分支已统一为「版本号 = 分支名 = dsh 版本」。
 9. **自动自签证书是自签的**：浏览器第一访问必然报警（这是自签的性质，不是插件故障）。要消除警告只有两条路：把 `$DSH_HOME/https-fix/self-signed.crt` 导入设备信任库，或改填证书路径使用受信任 CA（含 Let's Encrypt 的 IP 证书）。自签证书有效期 10 年、按 hosts 指纹复用，改域名/IP 会自动重签并重启监听（最迟 60 秒内由定时器完成）。
-11. **「忘记密码」里的重置方法先留空**（`lib/login-page.js` 的 `RESET_METHOD_HTML`）；面板只显示默认账号/密码。要补内容改那一个常量即可。维护者手工重置的办法：把 `$DSH_HOME/settings.yaml` 里 `https-fix.loginPasswordHash` 改成 `8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918`（= sha256(admin)）后重启 dsh。
+11. **「忘记密码」面板的内容 = `lib/login-page.js` 的 `RESET_METHOD_HTML`**：现在写了两条路（找 agent 按 `AGENTS.md` 重置 / 自己改 `settings.yaml` 的 `loginPasswordHash` 后重启），文案必须与 `AGENTS.md` 第 4 节保持一致——**改一处要改两处**。默认哈希 `8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918`（= sha256(admin)）。
 12. **登录门只挡插件的 HTTPS 端口**：dsh 自己的 http 端口（插件管不到）不受登录保护；要一并收口就打开「关闭 http 外网访问」。另外这是应用层的一道门，不是网络层鉴权。
 10. **测试环境装插件别用裸路径**：`dsh plugin add /path` 会生成 `link:` 依赖，插件按真实路径解析 `@deepseek-ai/schemastery` 就会失败（表现为 boot 报 `Cannot find package '@deepseek-ai/schemastery'`，折腾半天才发现）。用 `dsh plugin add file:/path`（生产就是 `file:` + 硬链接），或直接把插件目录放进 profile 的 `node_modules`。
 
@@ -416,6 +417,7 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `e0b558b` feat: adapt to dsh 0.1.5-rc.1 | 版本号规则改为「插件版本 = 分支名 = dsh 版本」；修正客户端校验路径为 `/api/https-fix/validate`（旧路径 405）；热补丁豁免改为按 **hostname** 匹配（端口无关，兼容前置 nginx） |
 | `6f2f2d0` feat: adapt to dsh 0.1.5-rc.2 | 逐项比对 7 个依赖点，**全部未变**，仅版本常量与元数据跟随到 rc.2；同时把 `docs/MAINTENANCE.md` 维护交接文档纳入仓库 |
 | `a613917` refactor(client): 设置卡片重构 | 头部实时状态徽标；四组分区（HTTPS 服务/TLS 证书/访问与安全/诊断）；证书来源显式单选；「填入当前地址」；每项「恢复默认」(`controller.unset`)；校验 N/M 汇总 +「放弃修改」；修复热补丁结果渲染成「✗ undefined」（`asLogLines` 归一字符串数组）；新增 `test/ui-harness.mjs`（31 项断言） |
+| `PENDING` docs: AGENTS.md + README 重写 + 忘记密码说明 | 新增 `AGENTS.md`（给 agent 的安装手册：红线「禁止让 dsh 给自己装/重启本插件」+ 安装前必问的四个问题 + 装完验证 + 重置账密步骤）；`README.md` 重写为「直说重点」（一句话定位 / 高危三条 / 作者节奏 / 可直接丢给 agent 的安装话术 / 版本表 / 自救）；登录页「忘记密码」填入两条重置路径，与 AGENTS.md 对齐 |
 | `d8903f6` feat(auth): 登录门 | 新增 `lib/auth.js`（SHA-256 口令 + HMAC 会话令牌 + timingSafeEqual）与 `lib/login-page.js`（仿 dsh 配色的单文件登录页）；`handleAuthRequest()` 在代理前拦截；默认 `admin`/`admin`，密码只存哈希；校验增至 12 项；harness 增至 47 项断言 |
 | `9df312b` feat(client): 「填入服务器 IP」 | host 侧 `serverIPv4Addresses()` 直接枚举网卡（非回环 IPv4，带 `{iface,address,private}`、公网优先），经 `status.serverIps` 下发；卡片第二个一键按钮：唯一候选直填、多候选展开带网卡名的按钮；IPv6 按要求保持方括号原样不归一 |
 | `723fc4b` fix(client): 设置卡片一行一个设置 | 删除 `hf_grid` 并排容器（HTTPS 端口/监听地址、cert/key 路径不再自动并排）；条件分支改用 `React.Fragment` 保证 Field 是 Section 直接子元素；harness 增加布局不变量断言（34 项断言） |
