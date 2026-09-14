@@ -26,7 +26,8 @@ dsh 每个版本都可能改动这些接口。**插件版本与 dsh 版本不一
 
 | dsh 版本 | 插件分支（装这个） | 插件版本 | 元数据 `dshhub.compatibility.dsh` |
 |---|---|---|---|
-| `0.1.5-rc.1`（当前） | `dsh-0.1.5-rc.1`、`main` | 0.1.5-rc.1 | `0.1.5-rc.1` |
+| `0.1.5-rc.2`（当前） | `dsh-0.1.5-rc.2`、`main` | 0.1.5-rc.2 | `0.1.5-rc.2` |
+| `0.1.5-rc.1` | `dsh-0.1.5-rc.1` | 0.1.5-rc.1 | `0.1.5-rc.1` |
 | `0.1.5-alpha.1` | `dsh-0.1.5-alpha.1` | 0.1.5-alpha.1 | `0.1.5-alpha.1` |
 | `0.1.2-rc.1` | `dsh-0.1.2-rc.1` | 0.1.2-rc.1 | `0.1.2-rc.1` |
 | `0.1.1-rc.2` | `dsh-0.1.1-rc.2` | 0.1.1-rc.2 | `0.1.1-rc.2` |
@@ -94,7 +95,7 @@ dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-<新版本>
 | 分支 | 内容 |
 |------|------|
 | `main` | 最新代码（跟随 dsh 最新版本） |
-| `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.5-rc.1`（当前）、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2`；分支名即插件版本号 |
+| `dsh-<版本号>` | 与特定 dsh 版本兼容的冻结分支，如 `dsh-0.1.5-rc.2`（当前）、`dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2`；分支名即插件版本号 |
 
 具体版本对应关系见上文[版本对应表](#版本对应表)。
 
@@ -111,8 +112,8 @@ dsh --version    # 必须与你要安装的分支名一致
 按 dsh 版本安装对应冻结分支（推荐，与你的 dsh 版本严格对应）：
 
 ```bash
-# dsh 0.1.5-rc.1 对应分支（当前）
-dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-0.1.5-rc.1
+# dsh 0.1.5-rc.2 对应分支（当前）
+dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-0.1.5-rc.2
 # 或始终追随最新代码（main，可能超前于你的 dsh 版本 → 见开头的版本警告）
 dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#main
 ```
