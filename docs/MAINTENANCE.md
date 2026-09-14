@@ -16,7 +16,7 @@
 | 当前适配的 dsh | `0.1.5-rc.2` |
 | 对应分支 | `dsh-0.1.5-rc.2`（= `main`） |
 | 插件版本 | `0.1.5-rc.2` |
-| 代码规模 | `lib/index.js` 814 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/client.js` 299 行 |
+| 代码规模 | `lib/index.js` 814 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/client.js` 512 行；`test/ui-harness.mjs` 167 行（卡片回归测试） |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
 | 冻结分支 | `dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
@@ -91,10 +91,18 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 ### `lib/client.js`（浏览器半边）
 
 - 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "settingsScope"]`。
-- 向 `settings.plugin.item` 槽注册**折叠卡片**（`ctx.slots.inject` + `ctx.slots.register`，第 287 行）。
-- 字段 UI 在第 233–266 行，顺序：关闭 http 外网访问 / http 端口 / 启用 https / https 端口 / 域名或 IP / 监听地址 / cert 路径（可留空） / key 路径（可留空） / 自动模式 / 核对版本号 / 客户端热补丁区块。
-- 数据通道：读走 `settingsScope`，写走 `settings.update`；「校验」按钮 `fetch("/api/https-fix/validate")`（第 130 行），热补丁按钮 `fetch("/api/https-fix/" + endpoint)`（第 176 行）。
-- **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）。
+- 向 `settings.plugin.item` 槽注册**折叠卡片**；`apply()` 在 499 行，卡片主体 `HttpsFixCard` 在 179–496 行。
+- 卡片结构：
+  - 头部：标题 + **实时状态徽标**（挂载 / 校验后 / 保存后调 `/api/https-fix/status`，显示「运行中 域名:端口 · 自签|自有证书」/「HTTPS 未启用」/「设置不可用」）+「未保存」+ 折叠箭头。
+  - 展开后四组 `Section`（114 行）：**HTTPS 服务**（启用 / 域名或 IP +「填入当前地址」/ https 端口 / 监听地址 / 访问入口预览）、**TLS 证书**（`Choice` 单选「自动自签 ↔ 自定义路径」，路径字段只在自定义模式出现）、**访问与安全**（自动模式 / 关闭 http 外网访问 / http 端口 / 核对版本号）、**诊断**（校验、热补丁、结果汇总、热补丁状态）。
+  - 页脚：「有 N 项改动未保存」+「放弃修改」+「保存配置」。
+- 视图原语在 106–177 行：`Chevron` / `Section` / `Field` / `Checkbox` / `TextInput` / `NumberInput` / `Choice`；样式全在文件顶部 `cssText`（25 行起，`hf_*` 类名，复用 `--dsw-*` 令牌），**不引入额外 CSS 文件**。
+- 数据通道：
+  - 读 `settingsScope` 快照：`value`（生效值）/ `user`（用户层，用来决定某项能否「恢复默认」）/ `base`（组成层，http 端口占位符）/ `writable` / `status`。
+  - 写：`staged` 暂存（191 行），保存时逐字段 `controller.set`（265 行）；「恢复默认」= `controller.unset(field)`（291 行，老 dsh 没有该方法时按钮自动隐藏）。
+  - RPC 统一走 `rpc()`（221 行）→ `/api/https-fix/<endpoint>`。
+- **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()`（211 行）归一——早期版本没归一，补丁结果显示成「✗ undefined」。
+- **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）；改完请跑第 8 节的 `test/ui-harness.mjs`。
 
 ### `lib/self-signed.js`（零依赖自签证书）
 
@@ -156,7 +164,7 @@ reconcile()            ← 启动时由定时器/首次调用触发；设置变�
 必须同时改四处，漏一处就会出现"能存但不生效"或"能显示但存不了"：
 
 1. `lib/index.js` 的 `Config`（45–56 行）加字段 + 默认值/约束。
-2. `lib/client.js` 第 233–266 行加一个 `jsx(Field, {label, hint, children})`，值用 `cur("<字段名>")`，写用对应的 `onChange`。
+2. `lib/client.js` 的 `HttpsFixCard` 里加一个 `jsx(Field, {id, label, hint, children})`（放进四个 `Section` 之一），值用 `cur("<字段名>")`，写用对应的 `onChange`；需要「恢复默认」就加 `reset: canReset && isUserSet("<字段名>")` + `onReset`。
 3. 若该字段影响运行行为 → 在 `reconcile()`（271 行）或其调用链里消费它。
 4. 若该字段影响"能不能正常跑" → 在 `runValidation()`（579 行）里加一项检查。
 
@@ -292,7 +300,7 @@ dsh 升级改了那一行。按 5.C 的表格把新字面量加进 `LOOPBACK_TAR
 # 1) 另建一个隔离 DSH_HOME，装本地插件
 export DSH_HOME=/tmp/dsh-test-home
 mkdir -p "$DSH_HOME"
-dsh plugin --profile web add /path/to/dsh-https-fix
+dsh plugin --profile web add file:/path/to/dsh-https-fix   # 必须是 file: 前缀,裸路径会装成 link: 导致模块解析失败(见第 9 节第 10 条)
 
 # 2) 用独立端口起一个测试实例（脱离当前 shell，避免把自己杀掉）
 systemd-run --unit=hf-test --collect \
@@ -302,6 +310,14 @@ systemd-run --unit=hf-test --collect \
   <node-bin>/dsh web
 
 # 3) 验证后按 PID 精确结束（从 ss -ltnp 取），不要用 pkill -f "dsh web"
+```
+
+**客户端卡片(设置页 UI)回归测试**(不用起 dsh:jsdom + React 直接渲染卡片,31 项断言,失败退出码非 0):
+
+```bash
+cd <仓库>
+npm i --no-save react@18 react-dom@18 jsdom   # 只装到本仓库 node_modules,不写进 package.json
+node test/ui-harness.mjs                      # 默认测 ../lib/client.js,也可传路径参数
 ```
 
 **验证清单**（RPC 响应形状有坑，注意 `result.log` / `result.value`，不是 `result.value.log`）：
