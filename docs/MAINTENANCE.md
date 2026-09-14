@@ -370,4 +370,5 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `84e5139` docs: README 重写 | 版本不匹配会让 dsh 完全不可用，必须首屏警告 |
 | `e0b558b` feat: adapt to dsh 0.1.5-rc.1 | 版本号规则改为「插件版本 = 分支名 = dsh 版本」；修正客户端校验路径为 `/api/https-fix/validate`（旧路径 405）；热补丁豁免改为按 **hostname** 匹配（端口无关，兼容前置 nginx） |
 | `6f2f2d0` feat: adapt to dsh 0.1.5-rc.2 | 逐项比对 7 个依赖点，**全部未变**，仅版本常量与元数据跟随到 rc.2；同时把 `docs/MAINTENANCE.md` 维护交接文档纳入仓库 |
+| `a613917` refactor(client): 设置卡片重构 | 头部实时状态徽标；四组分区（HTTPS 服务/TLS 证书/访问与安全/诊断）；证书来源显式单选；「填入当前地址」；每项「恢复默认」(`controller.unset`)；校验 N/M 汇总 +「放弃修改」；修复热补丁结果渲染成「✗ undefined」（`asLogLines` 归一字符串数组）；新增 `test/ui-harness.mjs`（31 项断言） |
 | `deb80f4` feat(cert): 无域名部署(IP + 自动自签证书) | 新增 `lib/self-signed.js`（纯 Node 自签，零新依赖）；证书路径改为可选（都留空 = 自动自签）；`domain` 支持 IP；`reconcile()` 增加配置签名，域名/端口/证书来源变化立即重启监听；`checkTls` 改用 `X509Certificate.checkHost/checkIP`（能认 IP SAN） |
