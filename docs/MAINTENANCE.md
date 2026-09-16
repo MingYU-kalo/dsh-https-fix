@@ -104,7 +104,7 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
   - **登录密码**：输入后立刻用 Web Crypto 算 SHA-256（`sha256Hex()`，模块级函数），只把哈希 stage 进 `loginPasswordHash`；明文只留在输入框、保存后清空。「退出登录」直接跳 `/__https-fix/logout`。常量 `DEFAULT_PW_HASH`（= sha256("admin")）**只**用于显示「当前:默认密码 / 自定义密码」——卡片里不提供「重置为默认密码」按钮（按用户要求删除），要重置走登录页「忘记密码」里的两条路。
 - **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()` 归一——早期版本没归一，补丁结果显示成「✗ undefined」。
 - **布局不变量**：一行一个设置，禁止任何并排容器（`hf_grid` 已删）；每个 `Field` 必须是 `Section` 的直接子元素（`React.Fragment` 包一层可以，它不产生 DOM 节点）。`test/ui-harness.mjs` 有对应断言。
-- **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）；改完请跑第 8 节的 `test/ui-harness.mjs`（47 项断言）。
+- **改这个文件后需要重启 dsh**（2026-09-17 实测修正，dsh 0.1.5-rc.2）：dsh-client-modules 的组合包只在 boot 时重建——`ln -f` 换 inode 和原地写同一 inode 都试过，浏览器拿到的仍是旧组合包（`rev` 不变），硬刷新没用。部署流程固定为：`git merge` → `ln -f` 接回硬链接 → **重启 dsh** → 刷新页面。改完请跑第 8 节的 `test/ui-harness.mjs`（47 项断言）。
 
 ### `lib/self-signed.js`（零依赖自签证书）
 
@@ -398,6 +398,7 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 9. **自动自签证书是自签的**：浏览器第一访问必然报警（这是自签的性质，不是插件故障）。要消除警告只有两条路：把 `$DSH_HOME/https-fix/self-signed.crt` 导入设备信任库，或改填证书路径使用受信任 CA（含 Let's Encrypt 的 IP 证书）。自签证书有效期 10 年、按 hosts 指纹复用，改域名/IP 会自动重签并重启监听（最迟 60 秒内由定时器完成）。
 11. **「忘记密码」面板的内容 = `lib/login-page.js` 的 `RESET_METHOD_HTML`**：现在写了两条路（找 agent 按 `AGENTS.md` 重置 / 自己改 `settings.yaml` 的 `loginPasswordHash` 后重启），文案必须与 `AGENTS.md` 第 4 节保持一致——**改一处要改两处**。默认哈希 `8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918`（= sha256(admin)）。
 12. **登录门只挡插件的 HTTPS 端口**：dsh 自己的 http 端口（插件管不到）不受登录保护；要一并收口就打开「关闭 http 外网访问」。另外这是应用层的一道门，不是网络层鉴权。
+13. **插件 client bundle 的改动必须重启 dsh 才生效**：见第 2 节 `lib/client.js` 那条——HMR 不会因为 `lib/client.js` 变化而重新组合组合包（`ln -f` 换 inode 与原地写都验证过），浏览器硬刷新只能拿到旧代码。host 侧（`lib/index.js` 等）同理，改动一律重启。
 10. **测试环境装插件别用裸路径**：`dsh plugin add /path` 会生成 `link:` 依赖，插件按真实路径解析 `@deepseek-ai/schemastery` 就会失败（表现为 boot 报 `Cannot find package '@deepseek-ai/schemastery'`，折腾半天才发现）。用 `dsh plugin add file:/path`（生产就是 `file:` + 硬链接），或直接把插件目录放进 profile 的 `node_modules`。
 
 ---
