@@ -101,7 +101,7 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
   - 读 `settingsScope` 快照：`value`（生效值）/ `user`（用户层，决定能否「恢复默认」）/ `base`（组成层，http 端口占位符）/ `writable` / `status`。
   - 写：`staged` 暂存，保存时逐字段 `controller.set`；「恢复默认」= `controller.unset(field)`（老 dsh 没有该方法时按钮自动隐藏）；RPC 统一走 `rpc()`。
   - **两个「填入」按钮**：「填入当前地址」= `window.location.hostname`（不含端口，IPv6 保持方括号原样）；「填入服务器 IP」= `status.serverIps`（host 侧网卡枚举，`{iface,address,private}[]`，唯一候选直填、多候选展开带网卡名的按钮）。
-  - **登录密码**：输入后立刻用 Web Crypto 算 SHA-256（`sha256Hex()`，模块级函数），只把哈希 stage 进 `loginPasswordHash`；明文只留在输入框、保存后清空。「重置为默认密码」写入常量 `DEFAULT_PW_HASH`（= sha256("admin")）；「退出登录」直接跳 `/__https-fix/logout`。
+  - **登录密码**：输入后立刻用 Web Crypto 算 SHA-256（`sha256Hex()`，模块级函数），只把哈希 stage 进 `loginPasswordHash`；明文只留在输入框、保存后清空。「退出登录」直接跳 `/__https-fix/logout`。常量 `DEFAULT_PW_HASH`（= sha256("admin")）**只**用于显示「当前:默认密码 / 自定义密码」——卡片里不提供「重置为默认密码」按钮（按用户要求删除），要重置走登录页「忘记密码」里的两条路。
 - **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()` 归一——早期版本没归一，补丁结果显示成「✗ undefined」。
 - **布局不变量**：一行一个设置，禁止任何并排容器（`hf_grid` 已删）；每个 `Field` 必须是 `Section` 的直接子元素（`React.Fragment` 包一层可以，它不产生 DOM 节点）。`test/ui-harness.mjs` 有对应断言。
 - **改这个文件后不需要重启 dsh**：它是 client bundle，浏览器硬刷新即可（HMR 也会自己更新）；改完请跑第 8 节的 `test/ui-harness.mjs`（47 项断言）。

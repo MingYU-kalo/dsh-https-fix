@@ -193,10 +193,7 @@ await act(async () => { byText("button", "保存配置").click() })
 await flush()
 check("保存写入的是 SHA-256 而不是明文", calls.some((c) => c[0] === "set" && c[1] === "loginPasswordHash" && c[2] === sha256("newpass123")), JSON.stringify(calls.filter((c) => c[0] === "set" && c[1] === "loginPasswordHash")))
 check("保存后密码框清空", pwBox.value === "")
-await act(async () => { byText("button", "重置为默认密码").click() })
-await act(async () => { byText("button", "保存配置").click() })
-await flush()
-check("重置为默认密码写入默认哈希", calls.some((c) => c[0] === "set" && c[1] === "loginPasswordHash" && c[2] === DEFAULT_HASH))
+check("卡片里没有「重置为默认密码」按钮", !$$("button").some((b) => b.textContent === "重置为默认密码"), $$("button").map((b) => b.textContent).join(" | "))
 check("退出登录按钮存在", !!byText("button", "退出登录"))
 
 // 只读
