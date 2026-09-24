@@ -29,20 +29,46 @@ global.IS_REACT_ACT_ENVIRONMENT = true
 let confirmCount = 0
 dom.window.confirm = () => { confirmCount++; return true }
 
-let snapshot = {
-  status: "ready", writable: true, revision: 3, mode: "host",
-  value: { enableHttps: true, domain: "old.example.com", httpsPort: 3081, address: "", certPath: "", keyPath: "", autoToken: true, versionCheck: true, blockHttpExternalAccess: false, loginEnabled: true, loginUser: "admin", loginPasswordHash: "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918" },
-  base: { httpPort: 3080 },
-  user: { domain: "old.example.com" }
-}
-const listeners = new Set()
+// —— 0.1.7 数据层 mock:remote.settings.describe / mutate ————————————————
+let configValue = { enableHttps: true, domain: "old.example.com", httpsPort: 3081, address: "", certPath: "", keyPath: "", autoToken: true, versionCheck: true, blockHttpExternalAccess: false, loginEnabled: true, loginUser: "admin", loginPasswordHash: "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918" }
+let userLayer = { domain: "old.example.com" }
+const baseLayer = { httpPort: 3080 }
+let revision = 3
+let writable = true
+let describeFails = false
 const calls = []
-const controller = {
-  subscribe: (cb) => { listeners.add(cb); return () => listeners.delete(cb) },
-  getSnapshot: () => snapshot,
-  set: async (k, v) => { calls.push(["set", k, v]); snapshot = { ...snapshot, value: { ...snapshot.value, [k]: v }, user: { ...snapshot.user, [k]: v } }; listeners.forEach((l) => l()) },
-  unset: async (k) => { calls.push(["unset", k]); const u = { ...snapshot.user }; delete u[k]; snapshot = { ...snapshot, user: u }; listeners.forEach((l) => l()) }
+const remoteSettings = {
+  async describe() {
+    if (describeFails) return { ok: false, error: { code: "unavailable", message: "settings unavailable" } }
+    return { ok: true, value: {
+      writable,
+      hasDocument: true,
+      namespaces: [{
+        ns: "https-fix", autoGenerate: false, schema: {}, value: configValue, base: baseLayer, user: userLayer,
+        applies: "live", secrets: [], revision
+      }]
+    } }
+  },
+  async mutate(ns, ops, expectedRevision) {
+    if (!writable) return { ok: false, error: { code: "readonly", message: "read-only" } }
+    for (const op of ops) {
+      const key = op.path[0]
+      if (op.op === "set") {
+        calls.push(["set", key, op.value])
+        configValue = { ...configValue, [key]: op.value }
+        userLayer = { ...userLayer, [key]: op.value }
+      } else {
+        calls.push(["unset", key])
+        const next = { ...userLayer }
+        delete next[key]
+        userLayer = next
+      }
+    }
+    revision += 1
+    return { ok: true }
+  }
 }
+
 
 let statusValue = { running: true, httpsPort: 3081, domain: "old.example.com", certSource: "auto-self-signed", certPath: "/root/.dsh/https-fix/self-signed.crt", enableHttps: true, serverIps: ["10.0.0.5", "172.17.0.1"] }
 global.fetch = async (url, init) => {
@@ -64,7 +90,17 @@ await import(pathToFileURL(clientFile).href)
 const mod = def.factory((n) => (n === "react" ? React : n === "react/jsx-runtime" ? jsxRuntime : require(n)))
 
 let Card = null
-mod.apply({ settingsScope: { bind: () => controller }, slots: { inject: (name, fn) => fn(), register: (spec, comp) => { Card = comp } } })
+let injected = null
+const ctx = {
+  remote: { settings: remoteSettings },
+  slots: {
+    inject: (name, fn) => fn(),
+    register: (spec, component) => { Card = component; injected = spec.inject() }
+  },
+  effect: (fn) => { const disposer = fn(); return () => { if (typeof disposer === "function") disposer() } }
+}
+mod.apply(ctx)
+const controller = injected.controller
 
 const results = []
 const check = (name, cond, extra) => { results.push([cond ? "PASS" : "FAIL", name, extra ?? ""]) }
@@ -76,13 +112,14 @@ const labelFor = (t) => $$("label.hf_label").find((l) => l.textContent === t).ht
 const flush = () => act(async () => { await new Promise((r) => setTimeout(r, 0)) })
 
 const root = ReactDOM.createRoot($("#root"))
-await act(async () => { root.render(React.createElement(Card, { controller })) })
+await act(async () => { root.render(React.createElement(Card, injected)) })
 await flush()
 
 check("卡片标题渲染", text(".hf_name") === "Https Fix")
 check("头部状态徽标=运行中", text(".hf_badge").includes("运行中 old.example.com:3081") && text(".hf_badge").includes("自签"), text(".hf_badge"))
-check("默认折叠(无 body)", $(".hf_body") === null)
-
+check("默认展开(设置页 tab)", $(".hf_body") !== null)
+await act(async () => { $(".hf_header").click() })
+check("可折叠", $(".hf_body") === null)
 await act(async () => { $(".hf_header").click() })
 check("展开后出现四个分组", ["HTTPS 服务", "TLS 证书", "访问与安全", "诊断"].every((t) => $$(".hf_sectionTitle").some((e) => e.textContent === t)), $$(".hf_sectionTitle").map((e) => e.textContent).join(" | "))
 // 布局不变量:一行一个设置,禁止任何自动并排容器
@@ -197,14 +234,14 @@ check("卡片里没有「重置为默认密码」按钮", !$$("button").some((b)
 check("退出登录按钮存在", !!byText("button", "退出登录"))
 
 // 只读
-snapshot = { ...snapshot, writable: false }
-await act(async () => { listeners.forEach((l) => l()) })
+writable = false
+await act(async () => { await controller.refresh() })
 check("只读时显示提示", $$(".hf_readOnly").length === 1, text(".hf_readOnly"))
 check("只读时保存按钮禁用", byText("button", "保存配置").disabled === true)
 
 // 设置不可用
-snapshot = { ...snapshot, status: "unavailable", writable: false }
-await act(async () => { listeners.forEach((l) => l()) })
+describeFails = true
+await act(async () => { await controller.refresh() })
 check("不可用时徽标提示", text(".hf_badge") === "设置不可用", text(".hf_badge"))
 
 console.log(results.map((r) => r[0].padEnd(5) + r[1] + (r[2] ? "   [" + r[2] + "]" : "")).join("\n"))
