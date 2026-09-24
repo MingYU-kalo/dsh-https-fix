@@ -93,8 +93,15 @@ const mod = def.factory((n) => (n === "react" ? React : n === "react/jsx-runtime
 
 let Card = null
 let injected = null
+// cordis 只允许访问已声明的服务:没 inject "remote" 就抛(2026-09-24 远程卡片"设置不可用"的真因)
+const declaredInject = Array.isArray(mod.inject) ? mod.inject : []
+let remoteAccessCount = 0
 const ctx = {
-  remote: { settings: remoteSettings },
+  get remote() {
+    if (!declaredInject.includes("remote")) throw new Error('cannot get property "remote" without inject(插件的 inject 里必须声明 "remote")')
+    remoteAccessCount++
+    return { settings: remoteSettings, $on: () => () => {} }
+  },
   slots: {
     inject: (name, fn) => fn(),
     register: (spec, component) => { Card = component; injected = spec.inject() }
@@ -117,6 +124,7 @@ const root = ReactDOM.createRoot($("#root"))
 await act(async () => { root.render(React.createElement(Card, injected)) })
 await flush()
 
+check("inject 里声明了 remote(cordis 访问约束)", declaredInject.includes("remote"), JSON.stringify(declaredInject))
 check("卡片标题渲染", text(".hf_name") === "Https Fix")
 check("头部状态徽标=运行中", text(".hf_badge").includes("运行中 old.example.com:3081") && text(".hf_badge").includes("自签"), text(".hf_badge"))
 check("默认展开(设置页 tab)", $(".hf_body") !== null)

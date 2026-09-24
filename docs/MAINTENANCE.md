@@ -90,7 +90,7 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 
 ### `lib/client.js`（浏览器半边）
 
-- 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "remote.settings"]`（0.1.7 起；0.1.5 及更早是 `settingsScope`）。
+- 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "remote", "remote.settings"]`（0.1.7 起；0.1.5 及更早是 `settingsScope`）。**`"remote"` 不能省**：cordis 按 inject 白名单放行服务访问，只 inject `"remote.settings"` 时 `ctx.remote` 本身就读不到（抛 `cannot get property "remote" without inject`）。
 - 向 `settings.plugins.tab` 槽注册**折叠卡片**（0.1.7 起；更早是 `settings.plugin.item`）：`apply()` 注册，`HttpsFixCard` 是主体。
 - 卡片结构：
   - 头部：标题 + **实时状态徽标**（挂载 / 校验后 / 保存后调 `/api/https-fix/status`，显示「运行中 域名:端口 · 自签|自有证书」/「HTTPS 未启用」/「设置不可用」）+「未保存」+ 折叠箭头。
@@ -347,6 +347,7 @@ token 交换没生效。确认「自动模式」开着，且 `connection.authent
 | 原文 | 含义 | 处置 |
 |---|---|---|
 | `transport failure … HTTP 401/403` | 浏览器请求没带上 dsh 令牌 | 确认走的是插件 HTTPS 端口（代理会注入令牌）；重启 dsh 让代理重新取 token |
+| `cannot get property "remote" without inject` | **插件的 `inject` 少写了 `"remote"`** —— cordis 的服务访问按 inject 白名单放行，只写 `"remote.settings"` 不够，读 `ctx.remote` 本身就被拒 | 客户端 `inject` 必须是 `["slots", "remote", "remote.settings"]`（官方 ui-settings 同样两个都写）；`test/ui-harness.mjs` 现在会模拟这个约束，漏写即失败 |
 | `宿主没有登记 https-fix 设置命名空间…` | 宿主 `describe()` 里没有本条目 | 插件没激活（看启动日志 `did not activate`），或 Config 里没有 `.volatile()` 字段 |
 | `settings unavailable` 之类 | 宿主设置服务自己报错 | 看 dsh 启动日志 |
 
@@ -472,5 +473,5 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `deb80f4` feat(cert): 无域名部署(IP + 自动自签证书) | 新增 `lib/self-signed.js`（纯 Node 自签，零新依赖）；证书路径改为可选（都留空 = 自动自签）；`domain` 支持 IP；`reconcile()` 增加配置签名，域名/端口/证书来源变化立即重启监听；`checkTls` 改用 `X509Certificate.checkHost/checkIP`（能认 IP SAN） |
 | `5259fd4` docs: 同步 0.1.7-rc.1 | 版本表 / 配置位置（`settings.yaml` → profile 补丁层）/ 依赖点复核结论 / 不变量 / 历史一并更新；附 `528719c` 的破坏性变更说明 |
 | `267bf24` fix(logging): HTTPS 启动/服务错误/版本拦截也双写 console.warn | 0.1.7 升级现场「http 3080 正常、https 3082 不监听」却**查不到任何现场**——`ctx.logger` 只有内存 ring buffer，不落盘。新增 `warnOnce()`（logger + 去重 `console.warn`），`httpsServer.on("error")` / 版本拦截 / `reconcile()` 的 catch 全部改走它 |
-| `d8380c9` fix(host): HTTPS 端口被占时自愈重试 | `267bf24` 让失败可见之后，远程 0.1.7 首次启动复现了 `EADDRINUSE`：重启脚本 kill 旧进程后 2 秒就拉起新进程，旧进程还没放开 3082 → 插件静默失败、只剩 502。现在对 `EADDRINUSE` 每秒重试一次、最多 15 次，首次重试落盘、成功时报「在重试 N 次后监听成功」；`stopServer()`/`startServer()` 都会清掉待重试定时器，非 `EADDRINUSE` 错误保持原样直接报错 |
-| `(本次)` fix(client): 设置卡片失败可自愈 + 诊断回传 | 远程 0.1.7 上卡片报「设置不可用」：`refresh()` 只在 `apply()` 时读一次 `remote.settings.describe()`，失败即永久不可用（官方 mirror 会挂 `settings/document-updated`/`connection/reset` 重读）。改为：退避重试 1s→30s 封顶、挂三个失效信号、已读到数据后失败只标注原因、卡片显示原文、新增 `POST /api/https-fix/clientlog` 把原文落到服务器日志；harness 47→54 项 |
+| `51807a5` fix(client): 设置卡片失败可自愈 + 诊断回传 | 卡片原来只在 `apply()` 时读一次 `remote.settings.describe()`，失败即永久「设置不可用」（官方 mirror 会挂 `settings/document-updated`/`connection/reset` 重读）。改为：1s→2s→4s→8s→16s→30s 退避重试；挂 `settings/document-updated`/`connection/reset`/`visibilitychange` 三个失效信号；已读到数据后的一次失败只标注原因、不降级；失败原文显示在卡片上并经新增的 `POST /api/https-fix/clientlog` 落到服务器日志（同因去重）；harness 47→54 项 |
+| `(本次)` fix(client): inject 补 `"remote"`（真因） | 卡片恒显示「设置不可用」的**真正原因**：客户端 `inject` 只写了 `["slots", "remote.settings"]`，漏了 `"remote"`。cordis 的服务访问按 inject 白名单放行 —— 读 `ctx.remote` 本身就被拒，`ctx.remote.settings.describe()` 一调用即抛 `cannot get property "remote" without inject`，被 catch 成「不可用」；官方 `ui-settings` 的 `inject` 同样两个都写。靠上一条的 clientlog 通道从用户浏览器抓回原文才定位到。harness 增加「模拟 cordis 服务访问约束」的 mock（漏 inject 即红），54→55 项 |
