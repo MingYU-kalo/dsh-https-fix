@@ -4,7 +4,7 @@
 > **与 README 的分工**：README 面向使用者（怎么装、怎么配、装错版本怎么自救）；本文面向维护者（内部怎么运作、要改就改哪里、崩了怎么查、怎么适配新 dsh 版本）。
 > **本文不含任何部署私密信息**：域名、IP、证书路径一律用 `<域名>`、`<证书路径>` 之类占位符，可以安全提交到公开仓库。
 >
-> 最后核对时间：2026-09-14，对应插件版本 `0.1.5-rc.2`（rc.1 → rc.2 已逐项比对，见第 10 节）。
+> 最后核对时间：2026-09-24，对应插件版本 `0.1.7-rc.1`（0.1.5-rc.2 → 0.1.7-rc.1 是**破坏性变更**，设置系统与客户端槽位都重写了，见第 5.C 节与第 10 节）。
 
 ---
 
@@ -13,13 +13,13 @@
 | 项 | 值 |
 |---|---|
 | 仓库 | `https://github.com/MingYU-kalo/dsh-https-fix`（公开） |
-| 当前适配的 dsh | `0.1.5-rc.2` |
-| 对应分支 | `dsh-0.1.5-rc.2`（= `main`） |
-| 插件版本 | `0.1.5-rc.2` |
-| 代码规模 | `lib/index.js` 1033 行、`lib/client.js` 606 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/auth.js` 111 行、`lib/login-page.js` 106 行；`test/ui-harness.mjs` 216 行（卡片回归测试，47 项断言） |
+| 当前适配的 dsh | `0.1.7-rc.1` |
+| 对应分支 | `dsh-0.1.7-rc.1`（= `main`） |
+| 插件版本 | `0.1.7-rc.1` |
+| 代码规模 | `lib/index.js` 1059 行、`lib/client.js` 670 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/auth.js` 111 行、`lib/login-page.js` 106 行；`test/ui-harness.mjs` 250 行（卡片回归测试，48 项断言） |
 | 面向外部的文档 | `README.md`（面向用户，87 行：高危警告 + 安装 + 版本表 + 自救）、`AGENTS.md`（**给 agent 的安装手册**，194 行：红线 + 四个必问问题 + 安装/验证/重置账密步骤）——两份都与本文件的内部细节互补 |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
-| 冻结分支 | `dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
+| 冻结分支 | `dsh-0.1.5-rc.2`、`dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
 ### 版本号规则（2026-09-10 起生效）
 
@@ -228,15 +228,18 @@ dsh 每个版本都可能改动插件依赖的内部接口。**必须逐项人�
 
 **依赖点清单**
 
-| 依赖点 | 用在哪 | 怎么比对 |
-|---|---|---|
-| `settings.installSection(ctx, ns, schema, entry, opts)` | `lib/index.js:331` | 看 `dsh-settings` 导出与签名，`opts` 是否仍认 `setSource`/`onChange` |
-| `connection.fetch.register({path, methods, requestBody, fetch})` | `lib/index.js:413` | 看 `dsh-client-connection` 里 `fetch` 服务的 `register` 签名 |
-| `connection.trustedHosts`（**活数组**） | `lib/index.js:545` | 确认仍是可就地 push 的数组；改成 getter/只读就要换方案 |
-| `connection.authenticatedUrl(base)` | `lib/index.js:175` | 确认仍返回带 `token=` 的 URL |
-| `clientModules.clientPath(pkg)` | `lib/index.js:443` | 确认仍能解析出 `dsh-client-connection` 的客户端 bundle 路径 |
-| `ctx.webServer.port` | `lib/index.js:105` | 确认字段名未变 |
-| `isLoopback` 目标行字面量 | `LOOPBACK_TARGET_LINES`（65 行） | 在 `dsh-client-connection/lib/client.js` 里搜 `isLoopback:`，把新行加进候选数组 |
+| 依赖点 | 用在哪 | 怎么比对 | 0.1.5-rc.2 → 0.1.7-rc.1 实测 |
+|---|---|---|---|
+| **设置系统** | 插件导出 `Config` + `settings.configure` | 0.1.6 起 `installSection` **被删除**：表单由插件导出的 `Config` 自动投影；字段必须标 `.volatile()`（否则不可编辑）；volatile 字段在 `apply(ctx, config)` 里是 **cosmokit 的盒子**（`createVolatile`），必须用 `isVolatile(v) ? v.get() : v` 解包，且盒子会**就地更新**（设置写入后无需重新 apply 即可读到新值） | **变了**，见 `plainConfig()` |
+| 设置变更链路 | `reconcile()` 的触发 | 写 profile patch → `reconcileProfilePatches` → Include 条目 `update()` → Loader 热重载 → **重新 apply 插件**（旧版靠 `installSection` 的 `onChange`） | **变了**，必须显式「启动收敛」 |
+| `connection.fetch.register({path, methods, requestBody, fetch})` | RPC 路由注册 | 0.1.7 仍有 `get fetch()`（精确路由注册表），形状未变；另新增 `connection.rpc.handle(channel, handler)`（前缀通道，本插件未用） | 未变 |
+| `connection.trustedHosts`（**活数组**） | `ensureTrustedHost()` | 仍是构造参数持有的活数组，栅栏 `isTrustedApiRequest` 每请求读 | 未变 |
+| `connection.authenticatedUrl(base)` | `currentToken()` | 仍返回带 `token=` 的 URL | 未变 |
+| `clientModules.clientPath(pkg)` | `loopbackBundlePath()` | 仍能解析 `dsh-client-connection` 的客户端 bundle 路径 | 未变 |
+| `ctx.webServer.port` | `apply()` 里 `actualHttpPort` | `dsh-host-webserver` 仍暴露 `get port()` | 未变 |
+| `isLoopback` 目标行字面量 | `LOOPBACK_TARGET_LINES` | 在 `dsh-client-connection/lib/client.js` 里搜 `isLoopback:`；rc.1 → 0.1.7-rc.1 该行**一直未变** | 未变 |
+| **客户端设置槽位** | `ctx.slots.register` | 0.1.6 起 `settings.plugin.item` **被删除**，改为 `settings.plugins.tab`（插件设置页的 tab，配合 `settings.section` 的外壳）；客户端服务 `settingsScope` 被 `remote.settings` 取代（`describe()` / `mutate(ns, ops, revision)`） | **变了**，见 `createController()` |
+| 插件清单兼容性 | `package.json` | 0.1.6 起 app-boot 会做 `evaluatePluginCompatibility`：只检查 `peerDependencies` 里的 `@deepseek-ai/dsh*` 范围。**本插件不声明 peerDependencies → 不会被 dsh 拒绝**（版本一致性仍由插件自己的 `versionCheck` 把关） | 新增机制，暂不用 |
 
 **版本核查的语义**（`versionCheckResult`，262 行）：不一致时返回 `block: true`，`reconcile()` 会**停止 HTTPS** 并写 warn。这是刻意的：与其带着不兼容的代码跑出诡异故障，不如明确拒绝。用户想强行试可以关掉 `versionCheck`，但需要三次确认。
 
@@ -270,6 +273,8 @@ git worktree remove /tmp/wt
 6. **响应流不要缓冲**：SSE 必须逐帧下发，别引入中间缓冲层。
 7. **日志双写**：cordis 的 `ctx.logger` 只有内存环形缓冲、**不落盘**，关键诊断必须同时 `console.warn`（`report()` 已封装，注意它是去重的）。
 9. **登录相关红线**：密码永远不落明文（settings 里只有 SHA-256，明文只存在于登录表单和设置卡片的输入框里）；账号/密码比较一律 `safeEqualHex`（`timingSafeEqual`）；`hf-auth` cookie 必须带 `HttpOnly; Secure; SameSite=Lax`；`/__https-fix/*` 是插件本地路径，**绝不能转发给上游**；新增任何本地路径都要放进 `handleAuthRequest()` 且在登录门之前处理。
+11. **volatile 配置必须解包，字段必须标 `.volatile()`**（dsh 0.1.6 起）：volatile 字段在 `apply(ctx, config)` 里是 cosmokit 的盒子（`createVolatile`），直接用会拿到 `{}`；一律走 `plainConfig()`（内部 `isVolatile(v) ? v.get() : v`）。盒子的值在设置写入时**就地更新**，所以 `source()` 每次读都是最新值。新增 Config 字段时忘记 `.volatile()` = 该字段在设置页里**不可编辑**（`settings.write` 会报 “no volatile fields”）。
+12. **启动必须显式收敛**：dsh 0.1.6 起 `settings` 不再有 `installSection`/`onChange` 回调，设置变更走「写 profile patch → Loader 热重载 → 重新 apply」。因此 `apply()` 结尾必须 `guard("启动收敛", () => reconcile())`，否则插件加载后不会启动 HTTPS（要等 60 秒定时器兜底）。
 10. **设置卡片一行一个设置，禁止并排**（用户明确要求）：不要引入两列/自适应并排容器（`hf_grid` 已删除），每个 `Field` 必须是 `Section` 的直接子元素；`React.Fragment` 只用来分组条件渲染，它不产生 DOM 节点。`test/ui-harness.mjs` 对此有专门断言（「设置项一行一个」「自定义路径也一行一个」）。
 
 ---
@@ -419,6 +424,7 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `6f2f2d0` feat: adapt to dsh 0.1.5-rc.2 | 逐项比对 7 个依赖点，**全部未变**，仅版本常量与元数据跟随到 rc.2；同时把 `docs/MAINTENANCE.md` 维护交接文档纳入仓库 |
 | `a613917` refactor(client): 设置卡片重构 | 头部实时状态徽标；四组分区（HTTPS 服务/TLS 证书/访问与安全/诊断）；证书来源显式单选；「填入当前地址」；每项「恢复默认」(`controller.unset`)；校验 N/M 汇总 +「放弃修改」；修复热补丁结果渲染成「✗ undefined」（`asLogLines` 归一字符串数组）；新增 `test/ui-harness.mjs`（31 项断言） |
 | `e5e275d` fix(client): 移除「重置为默认密码」按钮 | 卡片只留「退出登录」；`DEFAULT_PW_HASH` 仅用于状态提示；harness 增加“该按钮不存在”断言（仍 47 项） |
+| `528719c` feat: adapt to dsh 0.1.7-rc.1 | **破坏性变更**:`settings.installSection` 被删除 → 表单由导出的 Config 自动投影且字段必须 `.volatile()`（值在 config 里是 cosmokit 盒子，需 `plainConfig()` 解包，盒子就地更新）；设置变更改为「写 profile patch → Loader 热重载 → 重新 apply」，故补显式「启动收敛」；客户端 `settingsScope` → `remote.settings`（新增 `createController` 适配器），槽位 `settings.plugin.item` → `settings.plugins.tab`；其余 6 个依赖点复核未变 |
 | `7be838c` docs: 补 MIT LICENSE | 根目录新增标准 MIT 协议全文（Copyright (c) 2026 MingYU-kalo），README 许可段改为 `[MIT](LICENSE)` 链接；此前只有 `package.json` 的 `license` 字段和 README 的一句「MIT」，仓库存根没有 LICENSE 文件，GitHub API 的 `license` 字段一直是 `null` |
 | `eb5ff54` docs: dsh 升级警告 | README 顶部加 🔴「dsh 更新时必须同时处理这个插件」（二选一：先关掉插件 / 或让 agent 按 AGENTS.md 一并更新，并给出可直接复制的话术）；AGENTS.md 新增 §2.0「dsh 升级时的顺序」（先查上游有没有 `dsh-<新版本>` 分支 → 有就切分支、没有就先禁用 → 升完跑 12 项校验并重打热补丁） |
 | `27ec333` docs: AGENTS.md + README 重写 + 忘记密码说明 | 新增 `AGENTS.md`（给 agent 的安装手册：红线「禁止让 dsh 给自己装/重启本插件」+ 安装前必问的四个问题 + 装完验证 + 重置账密步骤）；`README.md` 重写为「直说重点」（一句话定位 / 高危三条 / 作者节奏 / 可直接丢给 agent 的安装话术 / 版本表 / 自救）；登录页「忘记密码」填入两条重置路径，与 AGENTS.md 对齐 |

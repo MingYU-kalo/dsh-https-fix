@@ -89,7 +89,7 @@
 
 ### 2.1 先对版本（错版本会让 dsh 起不来）
 
-    dsh --version        # 例如 0.1.5-rc.2
+    dsh --version        # 例如 0.1.7-rc.1
 
 ### 2.2 装对应分支（分支名 = 插件版本 = 目标 dsh 版本）
 
@@ -100,7 +100,20 @@
     # 裸路径会被 pnpm 装成 link: 依赖，插件按真实路径解析不到 @deepseek-ai/schemastery，dsh 直接起不来
     dsh plugin --profile web add file:/path/to/dsh-https-fix
 
-### 2.3 写配置（`$DSH_HOME/settings.yaml` 的 `https-fix` 段）
+### 2.3 写配置
+
+**dsh 0.1.6 起配置不再存 `settings.yaml`**，而是写进 profile 补丁层
+`$DSH_HOME/profiles/web/cordis.patch.yml`（顶层数组，按条目 id 覆盖）：
+
+    - id: https-fix
+      name: dsh-https-fix
+      config:
+        enableHttps: true
+        httpsPort: 3081
+        domain: dsh.example.com
+
+> 老的 `$DSH_HOME/settings.yaml` 里有 `https-fix` 段时，dsh 首次启动会**自动迁移**进 profile
+> 补丁层（迁移后原文件更名保留）；0.1.5 及更早版本仍写在 `settings.yaml`，字段名相同。
 
 把第 1 节的四个答案落进去，例如（**按实际答案改**）：
 
@@ -167,11 +180,14 @@
     # 算出新密码的 SHA-256
     printf '%s' '你的新密码' | sha256sum | cut -d' ' -f1
 
-把得到的十六进制填进 `$DSH_HOME/settings.yaml`：
+把得到的十六进制写进配置（**dsh 0.1.6 起在 profile 补丁层**，更早版本在 `settings.yaml`）：
 
-    https-fix:
-      loginUser: admin
-      loginPasswordHash: <上一步的哈希>
+    # $DSH_HOME/profiles/web/cordis.patch.yml
+    - id: https-fix
+      name: dsh-https-fix
+      config:
+        loginUser: admin
+        loginPasswordHash: <上一步的哈希>
 
 然后**重启 dsh**（人类执行）。
 

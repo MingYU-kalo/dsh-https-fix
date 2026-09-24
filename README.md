@@ -34,7 +34,7 @@
 
 自己动手就三步：
 
-    dsh --version                                                             # 1) 记下版本，例如 0.1.5-rc.2
+    dsh --version                                                             # 1) 记下版本，例如 0.1.7-rc.1
     dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-<版本>   # 2) 装同名分支
     # 3) 重启 dsh web，浏览器打开 https://<域名或IP>:<https端口>，用 admin/admin 登录
 
@@ -50,7 +50,8 @@
 
 | dsh 版本 | 装哪个分支（= 插件版本） |
 |---|---|
-| `0.1.5-rc.2`（当前） | `dsh-0.1.5-rc.2`、`main` |
+| `0.1.7-rc.1`（当前） | `dsh-0.1.7-rc.1`、`main` |
+| `0.1.5-rc.2` | `dsh-0.1.5-rc.2` |
 | `0.1.5-rc.1` | `dsh-0.1.5-rc.1` |
 | `0.1.5-alpha.1` | `dsh-0.1.5-alpha.1` |
 | `0.1.2-rc.1` | `dsh-0.1.2-rc.1` |
