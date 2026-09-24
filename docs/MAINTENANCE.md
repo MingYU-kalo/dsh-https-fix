@@ -90,21 +90,23 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 
 ### `lib/client.js`（浏览器半边）
 
-- 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "settingsScope"]`。
-- 向 `settings.plugin.item` 槽注册**折叠卡片**：`apply()` 注册，`HttpsFixCard` 是主体。
+- 单文件 bundle，由 `window.__ModuleLoader__.load({id:"dsh-https-fix", factory})` 加载，`inject = ["slots", "remote.settings"]`（0.1.7 起；0.1.5 及更早是 `settingsScope`）。
+- 向 `settings.plugins.tab` 槽注册**折叠卡片**（0.1.7 起；更早是 `settings.plugin.item`）：`apply()` 注册，`HttpsFixCard` 是主体。
 - 卡片结构：
   - 头部：标题 + **实时状态徽标**（挂载 / 校验后 / 保存后调 `/api/https-fix/status`，显示「运行中 域名:端口 · 自签|自有证书」/「HTTPS 未启用」/「设置不可用」）+「未保存」+ 折叠箭头。
   - 展开后四组 `Section`：**HTTPS 服务**（启用 / 域名或 IP +「填入当前地址」+「填入服务器 IP」/ https 端口 / 监听地址 / 访问入口预览）、**TLS 证书**（`Choice` 单选「自动自签 ↔ 自定义路径」）、**访问与安全**（登录开关 / 登录账号 / 登录密码 / 自动模式 / 关闭 http 外网访问 / http 端口 / 核对版本号）、**诊断**（校验、热补丁、结果汇总）。
   - 页脚：「有 N 项改动未保存」+「放弃修改」+「保存配置」。
 - 视图原语：`Chevron` / `Section` / `Field` / `Checkbox` / `TextInput`（支持 `type`）/ `NumberInput` / `Choice`；样式全在文件顶部 `cssText`（`hf_*` 类名，复用 `--dsw-*` 令牌），**不引入额外 CSS 文件**。
-- 数据通道：
-  - 读 `settingsScope` 快照：`value`（生效值）/ `user`（用户层，决定能否「恢复默认」）/ `base`（组成层，http 端口占位符）/ `writable` / `status`。
+- 数据通道（0.1.7）：`createController(ctx)` 把 `remote.settings` 适配成卡片一直用的 `{subscribe,getSnapshot,set,unset,refresh,dispose}` 形状。
+  - 读 `remote.settings.describe()`（**整份文档**，无参数）→ 在 `value.namespaces` 里按 `ns === "https-fix"`（= profile 条目 id）取行，得到 `value`（生效值）/ `user`（用户层，决定能否「恢复默认」）/ `base`（组成层，http 端口占位符）/ `revision` / `writable`。
+  - **失败必须能自愈**：首读失败（连接还没就绪、代理刚起来、宿主还没登记命名空间……）会按 1s→2s→4s→8s→16s→30s 退避重试，并挂上 `settings/document-updated` / `connection/reset` / `visibilitychange` 三个失效信号重读；已经读到过数据后的一次失败**只标注原因、不把好数据降级成「设置不可用」**。早期版本只读一次、失败即永久「设置不可用」。
+  - **失败原因会显示在卡片上，并回传宿主**：`POST /api/https-fix/clientlog`（宿主办端写 `[https-fix][client] …` 到服务器日志，同因去重）。卡片只写得出「设置不可用」时，靠这条定位浏览器里到底发生了什么。
   - 写：`staged` 暂存，保存时逐字段 `controller.set`；「恢复默认」= `controller.unset(field)`（老 dsh 没有该方法时按钮自动隐藏）；RPC 统一走 `rpc()`。
   - **两个「填入」按钮**：「填入当前地址」= `window.location.hostname`（不含端口，IPv6 保持方括号原样）；「填入服务器 IP」= `status.serverIps`（host 侧网卡枚举，`{iface,address,private}[]`，唯一候选直填、多候选展开带网卡名的按钮）。
   - **登录密码**：输入后立刻用 Web Crypto 算 SHA-256（`sha256Hex()`，模块级函数），只把哈希 stage 进 `loginPasswordHash`；明文只留在输入框、保存后清空。「退出登录」直接跳 `/__https-fix/logout`。常量 `DEFAULT_PW_HASH`（= sha256("admin")）**只**用于显示「当前:默认密码 / 自定义密码」——卡片里不提供「重置为默认密码」按钮（按用户要求删除），要重置走登录页「忘记密码」里的两条路。
 - **热补丁端点的 `result.log` 是字符串数组**（只有 `validate` 返回 `{ok,msg}` 数组），必须过 `asLogLines()` 归一——早期版本没归一，补丁结果显示成「✗ undefined」。
 - **布局不变量**：一行一个设置，禁止任何并排容器（`hf_grid` 已删）；每个 `Field` 必须是 `Section` 的直接子元素（`React.Fragment` 包一层可以，它不产生 DOM 节点）。`test/ui-harness.mjs` 有对应断言。
-- **改这个文件后需要重启 dsh**（2026-09-17 实测修正，dsh 0.1.5-rc.2）：dsh-client-modules 的组合包只在 boot 时重建——`ln -f` 换 inode 和原地写同一 inode 都试过，浏览器拿到的仍是旧组合包（`rev` 不变），硬刷新没用。部署流程固定为：`git merge` → `ln -f` 接回硬链接 → **重启 dsh** → 刷新页面。改完请跑第 8 节的 `test/ui-harness.mjs`（47 项断言）。
+- **改这个文件后需要重启 dsh**（2026-09-17 实测修正，dsh 0.1.5-rc.2）：dsh-client-modules 的组合包只在 boot 时重建——`ln -f` 换 inode 和原地写同一 inode 都试过，浏览器拿到的仍是旧组合包（`rev` 不变），硬刷新没用。部署流程固定为：`git merge` → `ln -f` 接回硬链接 → **重启 dsh** → 刷新页面。改完请跑第 8 节的 `test/ui-harness.mjs`（54 项断言，含「首读失败→退避重试自愈」「失败保留旧值」「原因回传宿主」）。
 
 ### `lib/self-signed.js`（零依赖自签证书）
 
@@ -333,6 +335,31 @@ token 交换没生效。确认「自动模式」开着，且 `connection.authent
 15 次全失败才放弃并报 `HTTPS 服务错误`。日志里**连「被占用」都没有** ⇒ 不是端口竞态，按 7.1 / 7.3 查；
 真被别的进程长期占用则 `ss -ltnp | grep :3082` 找出来。
 
+### 7.9 卡片显示「设置不可用(需经回环地址或受信域名访问)」
+
+这句提示来自 `remote.settings.describe()` 读不到本插件的设置命名空间。**先看卡片上冒号后面的原文**——
+现在卡片会把真实原因附在后面，并把首次失败回传到宿主日志（`grep 'https-fix\]\[client\]'`，同因只报一次）：
+
+    [https-fix][client] settings.describe: transport failure for /api/settings/describe: HTTP 401
+
+按原文分诊：
+
+| 原文 | 含义 | 处置 |
+|---|---|---|
+| `transport failure … HTTP 401/403` | 浏览器请求没带上 dsh 令牌 | 确认走的是插件 HTTPS 端口（代理会注入令牌）；重启 dsh 让代理重新取 token |
+| `宿主没有登记 https-fix 设置命名空间…` | 宿主 `describe()` 里没有本条目 | 插件没激活（看启动日志 `did not activate`），或 Config 里没有 `.volatile()` 字段 |
+| `settings unavailable` 之类 | 宿主设置服务自己报错 | 看 dsh 启动日志 |
+
+排查命令（在服务器上，验的是同一条链路）：
+
+    # 换 <ns> 之外不用改；payload 必须是 {args:{}}，端点就是 URL 路径
+    curl -sk -b /tmp/jar -X POST https://<域名>:<https端口>/api/settings/describe \\
+      -H 'content-type: application/json' \\
+      -d '{"type":"client-request","method":"settings/describe","rpcId":"p1","payload":{"args":{}}}' \\
+      | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print(d["ok"], d.get("value",{}).get("writable")); print([r["ns"] for r in d.get("value",{}).get("namespaces",[])])'
+
+返回里有 `https-fix` 且 `writable=true` ⇒ 宿主侧没问题，问题在浏览器（**先硬刷新**：组合包按 `rev` 缓存）。
+
 ### 7.8 校验报「未找到 isLoopback 目标行」
 
 dsh 升级改了那一行。按 5.C 的表格把新字面量加进 `LOOPBACK_TARGET_LINES`。
@@ -446,3 +473,4 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `5259fd4` docs: 同步 0.1.7-rc.1 | 版本表 / 配置位置（`settings.yaml` → profile 补丁层）/ 依赖点复核结论 / 不变量 / 历史一并更新；附 `528719c` 的破坏性变更说明 |
 | `267bf24` fix(logging): HTTPS 启动/服务错误/版本拦截也双写 console.warn | 0.1.7 升级现场「http 3080 正常、https 3082 不监听」却**查不到任何现场**——`ctx.logger` 只有内存 ring buffer，不落盘。新增 `warnOnce()`（logger + 去重 `console.warn`），`httpsServer.on("error")` / 版本拦截 / `reconcile()` 的 catch 全部改走它 |
 | `d8380c9` fix(host): HTTPS 端口被占时自愈重试 | `267bf24` 让失败可见之后，远程 0.1.7 首次启动复现了 `EADDRINUSE`：重启脚本 kill 旧进程后 2 秒就拉起新进程，旧进程还没放开 3082 → 插件静默失败、只剩 502。现在对 `EADDRINUSE` 每秒重试一次、最多 15 次，首次重试落盘、成功时报「在重试 N 次后监听成功」；`stopServer()`/`startServer()` 都会清掉待重试定时器，非 `EADDRINUSE` 错误保持原样直接报错 |
+| `(本次)` fix(client): 设置卡片失败可自愈 + 诊断回传 | 远程 0.1.7 上卡片报「设置不可用」：`refresh()` 只在 `apply()` 时读一次 `remote.settings.describe()`，失败即永久不可用（官方 mirror 会挂 `settings/document-updated`/`connection/reset` 重读）。改为：退避重试 1s→30s 封顶、挂三个失效信号、已读到数据后失败只标注原因、卡片显示原文、新增 `POST /api/https-fix/clientlog` 把原文落到服务器日志；harness 47→54 项 |

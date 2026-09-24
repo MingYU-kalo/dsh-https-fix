@@ -70,6 +70,7 @@ const remoteSettings = {
 }
 
 
+const clientReports = []
 let statusValue = { running: true, httpsPort: 3081, domain: "old.example.com", certSource: "auto-self-signed", certPath: "/root/.dsh/https-fix/self-signed.crt", enableHttps: true, serverIps: ["10.0.0.5", "172.17.0.1"] }
 global.fetch = async (url, init) => {
   JSON.parse(init.body)
@@ -79,6 +80,7 @@ global.fetch = async (url, init) => {
   else if (url.endsWith("/validate")) result = { ok: false, log: [{ ok: true, msg: "版本核对:dsh 0.1.5-rc.2 一致" }, { ok: false, msg: "热补丁:未应用" }] }
   else if (url.endsWith("/patch-loopback")) result = { ok: true, log: ["已写入热补丁"] }
   else if (url.endsWith("/revert-loopback")) result = { ok: true, log: ["已还原"] }
+  else if (url.endsWith("/clientlog")) { clientReports.push(JSON.parse(init.body).payload); result = { ok: true, value: { logged: true } } }
   else result = { ok: true }
   return { json: async () => ({ type: "server-response", rpcId: "t", result }) }
 }
@@ -239,10 +241,35 @@ await act(async () => { await controller.refresh() })
 check("只读时显示提示", $$(".hf_readOnly").length === 1, text(".hf_readOnly"))
 check("只读时保存按钮禁用", byText("button", "保存配置").disabled === true)
 
-// 设置不可用
+// 已读到过数据之后同步失败:保留上次的值,只标注原因
 describeFails = true
+writable = true
 await act(async () => { await controller.refresh() })
-check("不可用时徽标提示", text(".hf_badge") === "设置不可用", text(".hf_badge"))
+check("同步失败仍保留上次读到的值", text(".hf_badge").includes("运行中"), text(".hf_badge"))
+check("同步失败标出真实原因", $$(".hf_warn").some((e) => e.textContent.includes("settings unavailable")), $$(".hf_warn").map((e) => e.textContent).join(" | "))
+check("失败原因已回传宿主日志", clientReports.some((p) => p.where === "settings.describe" && String(p.message).includes("settings unavailable")), JSON.stringify(clientReports))
+
+// 从没读到过就失败 + 退避重试自愈(这条以前是永久"设置不可用")
+describeFails = true
+let Card2 = null
+let injected2 = null
+const ctx2 = Object.assign({}, ctx, { slots: { inject: (name, fn) => fn(), register: (spec, component) => { Card2 = component; injected2 = spec.inject() } } })
+mod.apply(ctx2)
+const controller2 = injected2.controller
+await act(async () => { root.unmount() })
+const host2 = document.createElement("div")
+document.body.appendChild(host2)
+const root2 = ReactDOM.createRoot(host2)
+await act(async () => { root2.render(React.createElement(Card2, injected2)) })
+await flush()
+check("首读失败徽标=设置不可用", text(".hf_badge") === "设置不可用", text(".hf_badge"))
+check("首读失败提示带原文", text(".hf_readOnly").includes("settings unavailable"), text(".hf_readOnly"))
+describeFails = false
+await act(async () => { await new Promise((r) => setTimeout(r, 1300)) })
+check("退避重试后自愈", text(".hf_badge").includes("运行中"), text(".hf_badge"))
+check("自愈后不可用提示消失", text(".hf_readOnly") === "<missing>" || !text(".hf_readOnly").includes("设置不可用"), text(".hf_readOnly"))
+controller2.dispose()
+controller.dispose()
 
 console.log(results.map((r) => r[0].padEnd(5) + r[1] + (r[2] ? "   [" + r[2] + "]" : "")).join("\n"))
 const failed = results.filter((r) => r[0] === "FAIL").length
