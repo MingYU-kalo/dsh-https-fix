@@ -323,6 +323,16 @@ token 交换没生效。确认「自动模式」开着，且 `connection.authent
 
 `EADDRINUSE`。注意 `checkPort()`（614 行）对"端口正是本插件自己在监听"做了豁免，不会误报。
 
+**最常见的成因是重启竞态**：旧进程还没放开端口新进程就起来了。0.1.7 升级那次就踩到了——
+现象是 **http 3080 正常、https 3082 静默不监听**（当时插件只在内存 logger 里 warn，终端/日志里没有任何痕迹，见第 10 节 `267bf24`）。
+现在插件自己会重试（1 秒一次，最多 15 次），终端与日志里能看到：
+
+    [https-fix] HTTPS 端口 3082 被占用(旧进程尚未退出?),1s 后重试 (1/15)
+    [https-fix] HTTPS 在重试 1 次后监听成功于 127.0.0.1:3082
+
+15 次全失败才放弃并报 `HTTPS 服务错误`。日志里**连「被占用」都没有** ⇒ 不是端口竞态，按 7.1 / 7.3 查；
+真被别的进程长期占用则 `ss -ltnp | grep :3082` 找出来。
+
 ### 7.8 校验报「未找到 isLoopback 目标行」
 
 dsh 升级改了那一行。按 5.C 的表格把新字面量加进 `LOOPBACK_TARGET_LINES`。
@@ -404,6 +414,7 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 11. **「忘记密码」面板的内容 = `lib/login-page.js` 的 `RESET_METHOD_HTML`**：现在写了两条路（找 agent 按 `AGENTS.md` 重置 / 自己改 `settings.yaml` 的 `loginPasswordHash` 后重启），文案必须与 `AGENTS.md` 第 4 节保持一致——**改一处要改两处**。默认哈希 `8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918`（= sha256(admin)）。
 12. **登录门只挡插件的 HTTPS 端口**：dsh 自己的 http 端口（插件管不到）不受登录保护；要一并收口就打开「关闭 http 外网访问」。另外这是应用层的一道门，不是网络层鉴权。
 13. **插件 client bundle 的改动必须重启 dsh 才生效**：见第 2 节 `lib/client.js` 那条——HMR 不会因为 `lib/client.js` 变化而重新组合组合包（`ln -f` 换 inode 与原地写都验证过），浏览器硬刷新只能拿到旧代码。host 侧（`lib/index.js` 等）同理，改动一律重启。
+14. **HTTPS 监听失败最多扛 15 秒**：只对 `EADDRINUSE` 每秒重试一次（重启竞态自愈），其它监听错误（证书、权限）不重试，直接 `warnOnce` 落盘。
 10. **测试环境装插件别用裸路径**：`dsh plugin add /path` 会生成 `link:` 依赖，插件按真实路径解析 `@deepseek-ai/schemastery` 就会失败（表现为 boot 报 `Cannot find package '@deepseek-ai/schemastery'`，折腾半天才发现）。用 `dsh plugin add file:/path`（生产就是 `file:` + 硬链接），或直接把插件目录放进 profile 的 `node_modules`。
 
 ---
@@ -425,6 +436,7 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `a613917` refactor(client): 设置卡片重构 | 头部实时状态徽标；四组分区（HTTPS 服务/TLS 证书/访问与安全/诊断）；证书来源显式单选；「填入当前地址」；每项「恢复默认」(`controller.unset`)；校验 N/M 汇总 +「放弃修改」；修复热补丁结果渲染成「✗ undefined」（`asLogLines` 归一字符串数组）；新增 `test/ui-harness.mjs`（31 项断言） |
 | `e5e275d` fix(client): 移除「重置为默认密码」按钮 | 卡片只留「退出登录」；`DEFAULT_PW_HASH` 仅用于状态提示；harness 增加“该按钮不存在”断言（仍 47 项） |
 | `528719c` feat: adapt to dsh 0.1.7-rc.1 | **破坏性变更**:`settings.installSection` 被删除 → 表单由导出的 Config 自动投影且字段必须 `.volatile()`（值在 config 里是 cosmokit 盒子，需 `plainConfig()` 解包，盒子就地更新）；设置变更改为「写 profile patch → Loader 热重载 → 重新 apply」，故补显式「启动收敛」；客户端 `settingsScope` → `remote.settings`（新增 `createController` 适配器），槽位 `settings.plugin.item` → `settings.plugins.tab`；其余 6 个依赖点复核未变 |
+| `(本次)` fix(host): HTTPS 端口被占时自愈重试 | 277bf24 让失败可见之后，远程 0.1.7 首次启动复现了 `EADDRINUSE`：重启脚本 kill 旧进程后 2 秒就拉起新进程，旧进程还没放开 3082 → 插件静默失败、只剩 502。现在对 `EADDRINUSE` 每秒重试一次、最多 15 次，首次重试落盘、成功时报「在重试 N 次后监听成功」；`stopServer()`/`startServer()` 都会清掉待重试定时器，非 `EADDRINUSE` 错误保持原样直接报错 |
 | `7be838c` docs: 补 MIT LICENSE | 根目录新增标准 MIT 协议全文（Copyright (c) 2026 MingYU-kalo），README 许可段改为 `[MIT](LICENSE)` 链接；此前只有 `package.json` 的 `license` 字段和 README 的一句「MIT」，仓库存根没有 LICENSE 文件，GitHub API 的 `license` 字段一直是 `null` |
 | `eb5ff54` docs: dsh 升级警告 | README 顶部加 🔴「dsh 更新时必须同时处理这个插件」（二选一：先关掉插件 / 或让 agent 按 AGENTS.md 一并更新，并给出可直接复制的话术）；AGENTS.md 新增 §2.0「dsh 升级时的顺序」（先查上游有没有 `dsh-<新版本>` 分支 → 有就切分支、没有就先禁用 → 升完跑 12 项校验并重打热补丁） |
 | `27ec333` docs: AGENTS.md + README 重写 + 忘记密码说明 | 新增 `AGENTS.md`（给 agent 的安装手册：红线「禁止让 dsh 给自己装/重启本插件」+ 安装前必问的四个问题 + 装完验证 + 重置账密步骤）；`README.md` 重写为「直说重点」（一句话定位 / 高危三条 / 作者节奏 / 可直接丢给 agent 的安装话术 / 版本表 / 自救）；登录页「忘记密码」填入两条重置路径，与 AGENTS.md 对齐 |
@@ -432,3 +444,6 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `9df312b` feat(client): 「填入服务器 IP」 | host 侧 `serverIPv4Addresses()` 直接枚举网卡（非回环 IPv4，带 `{iface,address,private}`、公网优先），经 `status.serverIps` 下发；卡片第二个一键按钮：唯一候选直填、多候选展开带网卡名的按钮；IPv6 按要求保持方括号原样不归一 |
 | `723fc4b` fix(client): 设置卡片一行一个设置 | 删除 `hf_grid` 并排容器（HTTPS 端口/监听地址、cert/key 路径不再自动并排）；条件分支改用 `React.Fragment` 保证 Field 是 Section 直接子元素；harness 增加布局不变量断言（34 项断言） |
 | `deb80f4` feat(cert): 无域名部署(IP + 自动自签证书) | 新增 `lib/self-signed.js`（纯 Node 自签，零新依赖）；证书路径改为可选（都留空 = 自动自签）；`domain` 支持 IP；`reconcile()` 增加配置签名，域名/端口/证书来源变化立即重启监听；`checkTls` 改用 `X509Certificate.checkHost/checkIP`（能认 IP SAN） |
+| `5259fd4` docs: 同步 0.1.7-rc.1 | 版本表 / 配置位置（`settings.yaml` → profile 补丁层）/ 依赖点复核结论 / 不变量 / 历史一并更新；附 `528719c` 的破坏性变更说明 |
+| `267bf24` fix(logging): HTTPS 启动/服务错误/版本拦截也双写 console.warn | 0.1.7 升级现场「http 3080 正常、https 3082 不监听」却**查不到任何现场**——`ctx.logger` 只有内存 ring buffer，不落盘。新增 `warnOnce()`（logger + 去重 `console.warn`），`httpsServer.on("error")` / 版本拦截 / `reconcile()` 的 catch 全部改走它 |
+| `(本次)` fix(host): HTTPS 端口被占时自愈重试 | `267bf24` 让失败可见之后，远程 0.1.7 首次启动复现了 `EADDRINUSE`：重启脚本 kill 旧进程后 2 秒就拉起新进程，旧进程还没放开 3082 → 插件静默失败、只剩 502。现在对 `EADDRINUSE` 每秒重试一次、最多 15 次，首次重试落盘、成功时报「在重试 N 次后监听成功」；`stopServer()`/`startServer()` 都会清掉待重试定时器，非 `EADDRINUSE` 错误保持原样直接报错 |
