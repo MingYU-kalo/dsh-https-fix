@@ -4,7 +4,7 @@
 > **与 README 的分工**：README 面向使用者（怎么装、怎么配、装错版本怎么自救）；本文面向维护者（内部怎么运作、要改就改哪里、崩了怎么查、怎么适配新 dsh 版本）。
 > **本文不含任何部署私密信息**：域名、IP、证书路径一律用 `<域名>`、`<证书路径>` 之类占位符，可以安全提交到公开仓库。
 >
-> 最后核对时间：2026-09-24，对应插件版本 `0.1.7-rc.1`（0.1.5-rc.2 → 0.1.7-rc.1 是**破坏性变更**，设置系统与客户端槽位都重写了，见第 5.C 节与第 10 节）。
+> 最后核对时间：2026-10-02，对应插件版本 `0.2.0-rc.2`（0.1.5-rc.2 → 0.1.7-rc.1 是**破坏性变更**，设置系统与客户端槽位都重写了；0.1.7-rc.1 → 0.2.0-rc.2 实测**插件依赖点全部未变**，只需跟随版本常量——但**部署侧**的 `llm-deepseek` 配置项在 0.2.0 改了插件名，见第 5.C 节与第 10 节）。
 
 ---
 
@@ -13,13 +13,13 @@
 | 项 | 值 |
 |---|---|
 | 仓库 | `https://github.com/MingYU-kalo/dsh-https-fix`（公开） |
-| 当前适配的 dsh | `0.1.7-rc.1` |
-| 对应分支 | `dsh-0.1.7-rc.1`（= `main`） |
-| 插件版本 | `0.1.7-rc.1` |
-| 代码规模 | `lib/index.js` 1059 行、`lib/client.js` 670 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/auth.js` 111 行、`lib/login-page.js` 106 行；`test/ui-harness.mjs` 250 行（卡片回归测试，48 项断言） |
+| 当前适配的 dsh | `0.2.0-rc.2` |
+| 对应分支 | `dsh-0.2.0-rc.2`（= `main`） |
+| 插件版本 | `0.2.0-rc.2` |
+| 代码规模 | `lib/index.js` 1059 行、`lib/client.js` 670 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/auth.js` 111 行、`lib/login-page.js` 106 行；`test/ui-harness.mjs`（卡片回归测试，55 项断言） |
 | 面向外部的文档 | `README.md`（面向用户，87 行：高危警告 + 安装 + 版本表 + 自救）、`AGENTS.md`（**给 agent 的安装手册**，194 行：红线 + 四个必问问题 + 安装/验证/重置账密步骤）——两份都与本文件的内部细节互补 |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
-| 冻结分支 | `dsh-0.1.5-rc.2`、`dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
+| 冻结分支 | `dsh-0.1.7-rc.1`、`dsh-0.1.5-rc.2`、`dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
 ### 版本号规则（2026-09-10 起生效）
 
@@ -220,13 +220,20 @@ dsh 每个版本都可能改动插件依赖的内部接口。**必须逐项人�
 2. 到 dsh 安装目录比对下面这张表的每一项（路径模式：
    `<node>/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/<包名>/`）。
 3. 按比对结果改代码：能只改常量的就只改常量；接口变了就改对应调用点。
-4. 改 `lib/index.js:59` 的 `TARGET_DSH_VERSION` → `X`。
+4. 改 `lib/index.js` 的 `TARGET_DSH_VERSION` → `X`（行号会漂，按常量名搜）。
 5. 改 `package.json` 的 `version` 与 `dshhub.compatibility.dsh` → `X`。
 6. 新建分支 `dsh-X`，同步更新 `main`。
-7. 装好后跑「校验 HTTPS 可用性」，**11 项必须全绿**（其中第 1 项就是版本核查）。
+7. 装好后跑「校验 HTTPS 可用性」，**12 项必须全绿**（其中第 1 项就是版本核查）。
 8. 更新 README 的版本对应表。
 
 > **rc.1 → rc.2 实测记录(2026-09-14)**:7 个依赖点**全部未变**。`dsh-client-connection/lib/index.js`(host 半边)与 `lib/client.js` 里的 `isLoopback` 目标行在 rc.1/rc.2 逐字节一致(客户端 bundle 的唯一差异来自本机上已打的热补丁),`dsh-settings`、`dsh-client-modules`、`dsh-host-webserver`、`dsh-app-boot` 均无代码改动;rc.1 → rc.2 的改动集中在 `dsh-client-ui-*` 与 `dsh-web-frontend` 的 UI bundle。因此本次只改版本常量与元数据(`TARGET_DSH_VERSION` / `package.json`),不动任何调用点。
+
+> **0.1.7-rc.1 → 0.2.0-rc.2 实测记录(2026-10-02)**：8 个依赖点**全部未变**，本次只改版本常量与元数据。
+> 比对方式是把两个版本的 `node_modules/@deepseek-ai` 全树 `diff -rq`：插件用到的 `dsh-settings`、`dsh-client-connection`、`dsh-client-modules`、`dsh-host-webserver`、`dsh-api-settings-controller`、`dsh-client-ui-slots` 运行时文件**逐字节相同**（只差 `package.json`/README），
+> 其中 `dsh-client-connection/lib/client.js` 的 md5 两版一致 → `LOOPBACK_TARGET_LINES` 无需新增字面量。0.2.0 全树的 360 处运行时改动集中在 `dsh-api-*` 控制器、`dsh-client-ui-*`、`dsh-agent-*` 与新增的 `dsh-otel`/`dsh-client-shortcuts` 等，均不在本插件的依赖面上。
+> `dsh-api-gateway/lib/index.js` 有改动但是**纯新增**（`hasLiveClient()`），不影响 `/api/https-fix/*` 的注册与鉴权。
+
+> ⚠️ **升级 dsh 时别只盯本插件**：0.2.0 把 DeepSeek LLM 插件拆成了三个包，部署侧 profile 补丁里 `id: llm-deepseek` 的 `name` 必须从 `@deepseek-ai/dsh-llm-deepseek` 改成 `@deepseek-ai/dsh-llm-deepseek-api-key`（settings 命名空间仍是 `llm-deepseek`）；另外 0.1.7 起该 provider 只走 Messages API，`baseURL` 必须是 `https://api.deepseek.com/anthropic`（裸域会 404，会话里表现为「DeepSeek Messages request failed (404)」）。详见第 7.10 节。
 
 **依赖点清单**
 
@@ -367,6 +374,30 @@ dsh 升级改了那一行。按 5.C 的表格把新字面量加进 `LOOPBACK_TAR
 
 ---
 
+### 7.10 对话里报 `DeepSeek Messages request failed (404)`
+
+**症状**：dsh 起来了、GUI 正常、设置页正常，但一发消息就失败；会话日志（`$DSH_HOME/sessions/<项目>/session-<id>/session.v4.jsonl.zstd`）里是：
+
+    {"type":"assistant/attempt", ..., "finish":{"kind":"error","failure":{"message":"DeepSeek Messages request failed (404)","code":"HTTP_404","status":404}}}
+
+**成因**：dsh 0.1.7 起 `dsh-llm-deepseek` **只走 Messages API（Anthropic 协议）**，请求 URL 是 `<baseURL>/v1/messages`。若部署侧 `llm-deepseek` 配置还留着 0.1.5 时代的 OpenAI 兼容根 `https://api.deepseek.com`，就会拼出 `https://api.deepseek.com/v1/messages` → **404**（正确根是 `https://api.deepseek.com/anthropic`，也是该插件的默认值）。
+
+**判定**：拿同一把 key 直接打两个地址，200/404 一眼可见：
+
+```bash
+VAL=$(sed -n 's/^  OPENAI_API_KEY: *//p' "$DSH_HOME/.credentials.yaml" | head -1 | tr -d '[:space:]')
+printf '%s' '{"model":"deepseek-flash","max_tokens":8,"messages":[{"role":"user","content":"hi"}]}' > /tmp/q.json
+for u in https://api.deepseek.com/anthropic/v1/messages https://api.deepseek.com/v1/messages; do
+  curl -s -o /dev/null -w "$u -> %{http_code}\n" -X POST "$u" \
+    -H "x-api-key: $VAL" -H 'anthropic-version: 2023-06-01' -H 'content-type: application/json' -d @/tmp/q.json
+done; rm -f /tmp/q.json
+```
+
+**处置**：把 profile 补丁层里 `id: llm-deepseek` 的 `baseURL` 改成 `https://api.deepseek.com/anthropic`，重启 dsh。
+另：**0.2.0 起该条目的 `name` 必须是 `@deepseek-ai/dsh-llm-deepseek-api-key`**（0.1.7 及更早是 `@deepseek-ai/dsh-llm-deepseek`；0.2.0 把它拆成 `…-api-key` 与 `…-account` 两个包，settings 命名空间仍是 `llm-deepseek`），写错会 boot 失败。
+
+---
+
 ## 8. 本地测试方法（务必隔离）
 
 **不要**在正在对外服务的 `$DSH_HOME` 上做实验，也不要同时跑两个同 `DSH_HOME` 的 dsh 实例。
@@ -387,7 +418,7 @@ systemd-run --unit=hf-test --collect \
 # 3) 验证后按 PID 精确结束（从 ss -ltnp 取），不要用 pkill -f "dsh web"
 ```
 
-**客户端卡片(设置页 UI)回归测试**(不用起 dsh:jsdom + React 直接渲染卡片,47 项断言,失败退出码非 0):
+**客户端卡片(设置页 UI)回归测试**(不用起 dsh:jsdom + React 直接渲染卡片,55 项断言,失败退出码非 0):
 
 ```bash
 cd <仓库>
