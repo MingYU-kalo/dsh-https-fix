@@ -85,6 +85,7 @@
    - **有该分支** → 先把插件切过去（`dsh plugin --profile web add github:MingYU-kalo/dsh-https-fix#dsh-<新版本>`），再升级 dsh；
    - **没有该分支** → **先禁用插件**（`dsh plugin --profile web remove dsh-https-fix`，或在 profile 的 `cordis.patch.yml` 里写 `disabled: true`），再升级 dsh。等作者适配出分支后再装回来。
 3. 升级完成后：按第 3 节跑一遍 12 项校验，并**重打一次热补丁**（dsh 升级会覆盖它的客户端 bundle）。
+   跨大版本时还要顺带检查**第三方配置**是否跟着变了（例：0.2.0 把 `llm-deepseek` 拆包改名、0.1.7 起该 provider 只走 Messages API）——见 `docs/MAINTENANCE.md` 第 7.10 节。
 4. 全程遵守上面的红线：要重启的 dsh 如果就是你所在的实例，**交给人类执行**。
 
 ### 2.1 先对版本（错版本会让 dsh 起不来）
