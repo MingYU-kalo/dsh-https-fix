@@ -4,7 +4,7 @@
 > **与 README 的分工**：README 面向使用者（怎么装、怎么配、装错版本怎么自救）；本文面向维护者（内部怎么运作、要改就改哪里、崩了怎么查、怎么适配新 dsh 版本）。
 > **本文不含任何部署私密信息**：域名、IP、证书路径一律用 `<域名>`、`<证书路径>` 之类占位符，可以安全提交到公开仓库。
 >
-> 最后核对时间：2026-10-02，对应插件版本 `0.2.0-rc.2`（0.1.5-rc.2 → 0.1.7-rc.1 是**破坏性变更**，设置系统与客户端槽位都重写了；0.1.7-rc.1 → 0.2.0-rc.2 实测**插件依赖点全部未变**，只需跟随版本常量——但**部署侧**的 `llm-deepseek` 配置项在 0.2.0 改了插件名，见第 5.C 节与第 10 节）。
+> 最后核对时间：2026-10-18，对应插件版本 `0.2.1-rc.2`（0.1.5-rc.2 → 0.1.7-rc.1 是**破坏性变更**，设置系统与客户端槽位都重写了；0.1.7-rc.1 → 0.2.0-rc.2、0.2.0-rc.2 → 0.2.1-rc.2 实测**插件依赖点全部未变**，只需跟随版本常量——但 0.2.1 搬了两处「文件/包在哪」（`dsh-client-connection` 的客户端 bundle 拆成 node/浏览器两份、`dsh-client-ui-slots` 等改为前端共享模块），见第 5.C 节；**部署侧**的 `llm-deepseek` 配置项在 0.2.0 改了插件名，见第 5.C 节与第 10 节）。
 
 ---
 
@@ -13,13 +13,13 @@
 | 项 | 值 |
 |---|---|
 | 仓库 | `https://github.com/MingYU-kalo/dsh-https-fix`（公开） |
-| 当前适配的 dsh | `0.2.0-rc.2` |
-| 对应分支 | `dsh-0.2.0-rc.2`（= `main`） |
-| 插件版本 | `0.2.0-rc.2` |
+| 当前适配的 dsh | `0.2.1-rc.2` |
+| 对应分支 | `dsh-0.2.1-rc.2`（= `main`） |
+| 插件版本 | `0.2.1-rc.2` |
 | 代码规模 | `lib/index.js` 1059 行、`lib/client.js` 670 行、`lib/self-signed.js` 272 行、`lib/https-proxy.js` 212 行、`lib/auth.js` 111 行、`lib/login-page.js` 106 行；`test/ui-harness.mjs`（卡片回归测试，55 项断言） |
 | 面向外部的文档 | `README.md`（面向用户，87 行：高危警告 + 安装 + 版本表 + 自救）、`AGENTS.md`（**给 agent 的安装手册**，194 行：红线 + 四个必问问题 + 安装/验证/重置账密步骤）——两份都与本文件的内部细节互补 |
 | 依赖 | 仅 `js-yaml`（host 侧解析属性）；运行时其余全用 Node 内建 |
-| 冻结分支 | `dsh-0.1.7-rc.1`、`dsh-0.1.5-rc.2`、`dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
+| 冻结分支 | `dsh-0.2.0-rc.2`、`dsh-0.1.7-rc.1`、`dsh-0.1.5-rc.2`、`dsh-0.1.5-rc.1`、`dsh-0.1.5-alpha.1`、`dsh-0.1.2-rc.1`、`dsh-0.1.1-rc.2` |
 
 ### 版本号规则（2026-09-10 起生效）
 
@@ -59,7 +59,7 @@ dsh 的 Web GUI 只监听 `127.0.0.1:<httpPort>` 的明文 HTTP。想把它安�
 | `NS` | settings 命名空间 `https-fix` |
 | `Config` | zod schema（组成配置与 settings 命名空间共用；字段 F1–F13 见行内注释） |
 | `TARGET_DSH_VERSION` | **适配新 dsh 版本时要改的第一处** |
-| `LOOPBACK_TARGET_LINES` | 客户端 bundle 里 `isLoopback` 行的候选字面量（**第二处**） |
+| `LOOPBACK_TARGET_LINES` | 客户端 bundle 里 `isLoopback` 行的候选字面量（**第二处**）。0.2.1 起文件从 `lib/client.js` 改名为 `lib/client.browser.js`，字面量本身未变，`clientModules.clientPath()` 会自动解析到浏览器那份 |
 | `exemptionPattern()` | 匹配已写入的豁免片段，新老形式都认 |
 | `normalizeVersion()` / `runningDshVersion()` | 去掉 `v` 前缀与 `+build`，再与目标版本精确比对 |
 | `dshHome()` / `patchFilePath()` / `certDir()` | `$DSH_HOME`、机器级补丁路径、自签证书与 `session.key` 所在目录 |
@@ -233,6 +233,13 @@ dsh 每个版本都可能改动插件依赖的内部接口。**必须逐项人�
 > 其中 `dsh-client-connection/lib/client.js` 的 md5 两版一致 → `LOOPBACK_TARGET_LINES` 无需新增字面量。0.2.0 全树的 360 处运行时改动集中在 `dsh-api-*` 控制器、`dsh-client-ui-*`、`dsh-agent-*` 与新增的 `dsh-otel`/`dsh-client-shortcuts` 等，均不在本插件的依赖面上。
 > `dsh-api-gateway/lib/index.js` 有改动但是**纯新增**（`hasLiveClient()`），不影响 `/api/https-fix/*` 的注册与鉴权。
 
+> **0.2.0-rc.2 → 0.2.1-rc.2 实测记录(2026-10-18)**：依赖点仍然全部可用，但 0.2.1 搬了两处「文件/包在哪」，接口形状没变。
+> 1. **客户端 bundle 拆分**：`dsh-client-connection` 的 `exports["./client"]` 从单文件变成 `{node: client.node.js, browser: client.browser.js, default: client.browser.js}`，原来的 `lib/client.js` 不存在了。`isLoopback:` 目标行**逐字节未变**；`clientModules.clientPath()` 读 `exports["./client"].default` → 自动解析到 `client.browser.js`，所以 `LOOPBACK_TARGET_LINES` 不用加字面量、`loopbackBundlePath()` 不用改（实测「一键打热补丁」写入的就是 `…/lib/client.browser.js`）。`client.node.js` 由 client-modules 的 chunk 路由显式拒绝下发，浏览器拿不到。
+> 2. **槽位运行时下架成前端共享模块**：`dsh-client-ui-slots`、`dsh-client-ui-primitives`、`dsh-client-store` **不再作为独立包安装**（0.2.1 装出来 306 个包，这三个都不在），改由 `dsh-web-frontend` 的共享注册表提供——`window.__ModuleLoader__` 的 `require` 映射里能直接看到 `@deepseek-ai/dsh-client-ui-slots` / `-primitives` / `dsh-client-store`，各客户端包里的 `require("@deepseek-ai/dsh-client-ui-slots")` 由这张表满足。`slots` **服务**本身现在由 `dsh-client-ui-renderer/lib/client.js` 提供（`super(ctx, "slots")`），槽位名（`settings.plugins.tab` 等）与 `register/inject/entries/getVersion/subscribe` 形状未变；本插件只 `require("react")` / `react/jsx-runtime`，不受影响。
+> 其余依赖点：`dsh-settings` 只多了 `locale/`；`dsh-client-connection/lib/index.js`（host 半边）改动很大（Peer/principal、新增 `/connect` 路由、browser-auth v2 cookie、Host 栅栏新增「监听地址字面量」豁免），但插件用到的 `connection.fetch`（路由注册）、`trustedHosts` 活数组、`authenticatedUrl()` 形状未变；`dsh-api-settings-controller` 的 `remote.settings.describe/mutate` 只是把 schema 从手写 union 换成 `z.json()` 并补描述，字段名（`ns`/`value`/`user`/`revision`/`expectedRevision`）未变。
+> 0.2.1 全树 `diff -rq` 共 1341 处（新增 28 个包、移除 11 个包，例如新增 `dsh-plugin-market`、`dsh-api-remote-access`、`dsh-experimental-inspector`、`dsh-tool-terminal`）。因此本次依旧**只改版本常量与元数据**，`lib/client.js` 一行未动。
+> 部署侧无新增坑：`llm-deepseek` 仍是「base 行 `id: llm-deepseek` → `@deepseek-ai/dsh-llm-deepseek-api-key`」+ `llm-deepseek-account`，Messages 根仍是 `<baseURL>/v1`（`https://api.deepseek.com/anthropic` 不变）；`dsh-cost-meter@1.8.5` 的 peer 范围 `>=0.2.0-rc.1 <0.3.0-0` 覆盖 0.2.1，实测能正常加载。
+
 > ⚠️ **升级 dsh 时别只盯本插件**：0.2.0 把 DeepSeek LLM 插件拆成了三个包，部署侧 profile 补丁里 `id: llm-deepseek` 的 `name` 必须从 `@deepseek-ai/dsh-llm-deepseek` 改成 `@deepseek-ai/dsh-llm-deepseek-api-key`（settings 命名空间仍是 `llm-deepseek`）；另外 0.1.7 起该 provider 只走 Messages API，`baseURL` 必须是 `https://api.deepseek.com/anthropic`（裸域会 404，会话里表现为「DeepSeek Messages request failed (404)」）。详见第 7.10 节。
 
 **依赖点清单**
@@ -246,7 +253,7 @@ dsh 每个版本都可能改动插件依赖的内部接口。**必须逐项人�
 | `connection.authenticatedUrl(base)` | `currentToken()` | 仍返回带 `token=` 的 URL | 未变 |
 | `clientModules.clientPath(pkg)` | `loopbackBundlePath()` | 仍能解析 `dsh-client-connection` 的客户端 bundle 路径 | 未变 |
 | `ctx.webServer.port` | `apply()` 里 `actualHttpPort` | `dsh-host-webserver` 仍暴露 `get port()` | 未变 |
-| `isLoopback` 目标行字面量 | `LOOPBACK_TARGET_LINES` | 在 `dsh-client-connection/lib/client.js` 里搜 `isLoopback:`；rc.1 → 0.1.7-rc.1 该行**一直未变** | 未变 |
+| `isLoopback` 目标行字面量 | `LOOPBACK_TARGET_LINES` | 在 `dsh-client-connection/lib/client.js`（0.2.1 起是 `lib/client.browser.js`）里搜 `isLoopback:`；rc.1 → 0.1.7-rc.1、0.2.0-rc.2 → 0.2.1-rc.2 该行**一直未变** | 未变 |
 | **客户端设置槽位** | `ctx.slots.register` | 0.1.6 起 `settings.plugin.item` **被删除**，改为 `settings.plugins.tab`（插件设置页的 tab，配合 `settings.section` 的外壳）；客户端服务 `settingsScope` 被 `remote.settings` 取代（`describe()` / `mutate(ns, ops, revision)`） | **变了**，见 `createController()` |
 | 插件清单兼容性 | `package.json` | 0.1.6 起 app-boot 会做 `evaluatePluginCompatibility`：只检查 `peerDependencies` 里的 `@deepseek-ai/dsh*` 范围。**本插件不声明 peerDependencies → 不会被 dsh 拒绝**（版本一致性仍由插件自己的 `versionCheck` 把关） | 新增机制，暂不用 |
 
@@ -283,7 +290,7 @@ git worktree remove /tmp/wt
 7. **日志双写**：cordis 的 `ctx.logger` 只有内存环形缓冲、**不落盘**，关键诊断必须同时 `console.warn`（`report()` 已封装，注意它是去重的）。
 9. **登录相关红线**：密码永远不落明文（settings 里只有 SHA-256，明文只存在于登录表单和设置卡片的输入框里）；账号/密码比较一律 `safeEqualHex`（`timingSafeEqual`）；`hf-auth` cookie 必须带 `HttpOnly; Secure; SameSite=Lax`；`/__https-fix/*` 是插件本地路径，**绝不能转发给上游**；新增任何本地路径都要放进 `handleAuthRequest()` 且在登录门之前处理。
 11. **volatile 配置必须解包，字段必须标 `.volatile()`**（dsh 0.1.6 起）：volatile 字段在 `apply(ctx, config)` 里是 cosmokit 的盒子（`createVolatile`），直接用会拿到 `{}`；一律走 `plainConfig()`（内部 `isVolatile(v) ? v.get() : v`）。盒子的值在设置写入时**就地更新**，所以 `source()` 每次读都是最新值。新增 Config 字段时忘记 `.volatile()` = 该字段在设置页里**不可编辑**（`settings.write` 会报 “no volatile fields”）。
-12. **启动必须显式收敛**：dsh 0.1.6 起 `settings` 不再有 `installSection`/`onChange` 回调，设置变更走「写 profile patch → Loader 热重载 → 重新 apply」。因此 `apply()` 结尾必须 `guard("启动收敛", () => reconcile())`，否则插件加载后不会启动 HTTPS（要等 60 秒定时器兜底）。
+12. **启动必须显式收敛**：dsh 0.1.6 起 `settings` 不再有 `installSection`/`onChange` 回调，设计上设置变更走「写 profile patch → Loader 热重载 → 重新 apply」；但 0.2.x 用 bundle 安装时条目**不会被重新 apply**（实测，见 7.11）。因此 `apply()` 结尾必须 `guard("启动收敛", () => reconcile())`，它是唯一可靠的启动路径——少了它插件加载后根本不会启动 HTTPS。
 10. **设置卡片一行一个设置，禁止并排**（用户明确要求）：不要引入两列/自适应并排容器（`hf_grid` 已删除），每个 `Field` 必须是 `Section` 的直接子元素；`React.Fragment` 只用来分组条件渲染，它不产生 DOM 节点。`test/ui-harness.mjs` 对此有专门断言（「设置项一行一个」「自定义路径也一行一个」）。
 
 ---
@@ -398,6 +405,24 @@ done; rm -f /tmp/q.json
 
 ---
 
+### 7.11 设置页保存成功，但端口/域名/`blockHttpExternalAccess` 没生效
+
+**现象**：卡片提示保存成功，`settings/describe` 里也确实变了，但 HTTPS 还监听着旧端口、`$DSH_HOME/cordis.patch.yml` 没被重写、`trustedHosts` 里还是旧域名。
+
+**原因**：用 `dsh plugin --profile web add` 装插件时，插件是 profile 的 **bundle** 层（`package.json` 的 `dsh.profile.bundles`），条目由 bundle 的 `insert` 插入。保存走 `settings.mutate` → 写 profile 补丁层 → `reconcileProfilePatches`，但该条目并不会被重新 apply；volatile 盒子只是被就地更新，于是「读」是新值、「监听」还是旧值。
+
+**实测**（隔离实例，`0.2.0-rc.2` 与 `0.2.1-rc.2` 表现完全一致，与本插件无关）：
+
+```bash
+# 保存 blockHttpExternalAccess=true 后等 30 秒
+ls "$DSH_HOME/cordis.patch.yml"     # 不存在 = apply() 没有再跑过
+# 保存 httpsPort 3096 -> 3097 后等 30 秒
+ss -ltn | grep -E ':3096|:3097'     # 仍是 3096
+```
+
+**处置**：这类「监听期」配置（`enableHttps`/`httpsPort`/`address`/`domain`/`certPath`/`keyPath`/`blockHttpExternalAccess`/`httpPort`）保存后要**重启 dsh**（`bash /root/.dsh/web-start.sh`）。
+「请求期」配置不受影响：登录开关与账号每请求读 `authConfig()`（值在 volatile 盒子里，就地更新），保存后立即生效。
+
 ## 8. 本地测试方法（务必隔离）
 
 **不要**在正在对外服务的 `$DSH_HOME` 上做实验，也不要同时跑两个同 `DSH_HOME` 的 dsh 实例。
@@ -507,3 +532,4 @@ curl -sk -b /tmp/jar -X POST "https://<域名>:<https端口>/api/settings/descri
 | `51807a5` fix(client): 设置卡片失败可自愈 + 诊断回传 | 卡片原来只在 `apply()` 时读一次 `remote.settings.describe()`，失败即永久「设置不可用」（官方 mirror 会挂 `settings/document-updated`/`connection/reset` 重读）。改为：1s→2s→4s→8s→16s→30s 退避重试；挂 `settings/document-updated`/`connection/reset`/`visibilitychange` 三个失效信号；已读到数据后的一次失败只标注原因、不降级；失败原文显示在卡片上并经新增的 `POST /api/https-fix/clientlog` 落到服务器日志（同因去重）；harness 47→54 项 |
 | `9e3f3e1` fix(client): inject 补 `"remote"`（真因） | 卡片恒显示「设置不可用」的**真正原因**：客户端 `inject` 只写了 `["slots", "remote.settings"]`，漏了 `"remote"`。cordis 的服务访问按 inject 白名单放行 —— 读 `ctx.remote` 本身就被拒，`ctx.remote.settings.describe()` 一调用即抛 `cannot get property "remote" without inject`，被 catch 成「不可用」；官方 `ui-settings` 的 `inject` 同样两个都写。靠上一条的 clientlog 通道从用户浏览器抓回原文才定位到。harness 增加「模拟 cordis 服务访问约束」的 mock（漏 inject 即红），54→55 项 |
 | `99a3178` feat: adapt to dsh 0.2.0-rc.2 | 八版以来第一次「零调用点改动」的适配:把 0.1.7-rc.1 与 0.2.0-rc.2 的 `node_modules/@deepseek-ai` 全树 `diff -rq`，插件依赖面上六个包的运行时文件**逐字节相同**(只差 `package.json`/README)，`dsh-client-connection/lib/client.js` 的 md5 两版一致 → `LOOPBACK_TARGET_LINES` 无需新增字面量;`dsh-api-gateway` 仅有纯新增的 `hasLiveClient()`。0.2.0 的 360 处运行时改动都在 `dsh-api-*` 控制器、`dsh-client-ui-*`、`dsh-agent-*` 与新增的 `dsh-otel`/`dsh-client-shortcuts` 上，不在依赖面内。同时补记部署侧坑:0.2.0 拆包后 `llm-deepseek` 条目 `name` 必须是 `@deepseek-ai/dsh-llm-deepseek-api-key`，且 0.1.7 起 baseURL 必须带 `/anthropic`(见 5.C 与 7.10) |
+| `804a870` feat: adapt to dsh 0.2.1-rc.2 | 依赖点复核:目标行 `isLoopback: transport?.ownsHost === true || …` 逐字节未变,但 0.2.1 把 `dsh-client-connection` 的客户端 bundle 拆成 `client.node.js` + `client.browser.js`(`exports["./client"].default` 指向后者,`clientModules.clientPath()` 自动跟随 → 热补丁落点变成 `client.browser.js`);`dsh-client-ui-slots`/`dsh-client-ui-primitives`/`dsh-client-store` 不再作为独立包安装,改由 `dsh-web-frontend` 的共享模块注册表提供,`slots` 服务移到 `dsh-client-ui-renderer`;`settings.describe/mutate` 字段名未变。实测:隔离实例 12/12 校验、`test/ui-harness.mjs` 55/55、服务器升级后 12/12、`dsh-cost-meter@1.8.5` 正常加载。本次仍只改版本常量与元数据 |
